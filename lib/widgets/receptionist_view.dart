@@ -8,15 +8,21 @@ import '../services/clinic_store.dart';
 
 class ReceptionistView extends StatefulWidget {
   final ClinicStore store;
+  final int activeIndex;
+  final ValueChanged<int> onTabChanged;
 
-  const ReceptionistView({super.key, required this.store});
+  const ReceptionistView({
+    super.key, 
+    required this.store,
+    required this.activeIndex,
+    required this.onTabChanged,
+  });
 
   @override
   State<ReceptionistView> createState() => _ReceptionistViewState();
 }
 
-class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ReceptionistViewState extends State<ReceptionistView> {
 
   // Registration Form Keys & Controllers
   final _formKey = GlobalKey<FormState>();
@@ -42,13 +48,11 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
     _nameController.addListener(_onNameChanged);
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _nameController.removeListener(_onNameChanged);
     _mobileController.dispose();
     _nameController.dispose();
@@ -166,7 +170,7 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
             SnackBar(content: Text('$name added to live queue!')),
           );
           _clearRegistrationFields();
-          _tabController.animateTo(1); // switch to Queue
+          widget.onTabChanged(1); // switch to Queue
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('$name is already active in queue.')),
@@ -250,44 +254,18 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth > 900;
+        final views = [
+          _buildAppointmentsTab(pendingAppts, approvedAppts, todayAppts),
+          _buildQueueManagerTab(activeQueue, historyQueue, waitingQueue, isDesktop),
+          _buildRegistrationTab(isDesktop),
+          _buildMedicineInventoryTab(isDesktop),
+        ];
 
-        // Common Header Panel
-        final dashboardHeader = Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          color: Colors.white,
-          child: TabBar(
-            controller: _tabController,
-            isScrollable: true,
-            indicatorColor: const Color(0xFF0D9488),
-            labelColor: const Color(0xFF0D9488),
-            unselectedLabelColor: Colors.grey,
-            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-            tabs: const [
-              Tab(icon: Icon(Icons.calendar_month_outlined), text: 'Appointments'),
-              Tab(icon: Icon(Icons.people_outline), text: 'Queue Manager'),
-              Tab(icon: Icon(Icons.person_add_outlined), text: 'Patient Registration'),
-              Tab(icon: Icon(Icons.medical_services_outlined), text: 'Medicine Inventory'),
-            ],
-          ),
-        );
+        if (widget.activeIndex < 0 || widget.activeIndex >= views.length) {
+          return const Center(child: Text('Desk Section Coming Soon!'));
+        }
 
-        // Render contents based on tabs
-        return Column(
-          children: [
-            dashboardHeader,
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildAppointmentsTab(pendingAppts, approvedAppts, todayAppts),
-                  _buildQueueManagerTab(activeQueue, historyQueue, waitingQueue, isDesktop),
-                  _buildRegistrationTab(isDesktop),
-                  _buildMedicineInventoryTab(isDesktop),
-                ],
-              ),
-            ),
-          ],
-        );
+        return views[widget.activeIndex];
       },
     );
   }

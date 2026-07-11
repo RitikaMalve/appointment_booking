@@ -7,8 +7,15 @@ import '../services/clinic_store.dart';
 
 class PatientView extends StatefulWidget {
   final ClinicStore store;
+  final int activeIndex;
+  final ValueChanged<int> onTabChanged;
 
-  const PatientView({super.key, required this.store});
+  const PatientView({
+    super.key, 
+    required this.store,
+    required this.activeIndex,
+    required this.onTabChanged,
+  });
 
   @override
   State<PatientView> createState() => _PatientViewState();
@@ -278,87 +285,125 @@ class _PatientViewState extends State<PatientView> {
     final appointments = widget.store.getAppointmentsByMobile(patient.mobileNumber);
     final approvedAppts = appointments.where((a) => a.status == AppointmentStatus.approved).toList();
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isDesktop = constraints.maxWidth > 950;
+    if (widget.activeIndex == 0) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final isDesktop = constraints.maxWidth > 950;
 
-        // Left Panel contents
-        final leftSection = [
-          // 1. Welcome Card
-          _buildWelcomeCard(patient),
-          const SizedBox(height: 20),
+          // Left Panel contents
+          final leftSection = [
+            // 1. Welcome Card
+            _buildWelcomeCard(patient),
+            const SizedBox(height: 20),
 
-          // 2. Metrics Summary Cards Row
-          _buildMetricsSummaryRow(approvedAppts, records, inQueue, queueNumber),
-          const SizedBox(height: 24),
+            // 2. Metrics Summary Cards Row
+            _buildMetricsSummaryRow(approvedAppts, records, inQueue, queueNumber),
+            const SizedBox(height: 24),
 
-          // 3. Explore Departments Cards Grid
-          _buildExploreDepartments(),
-          const SizedBox(height: 24),
+            // 3. Explore Departments Cards Grid
+            _buildExploreDepartments(),
+            const SizedBox(height: 24),
 
-          // 4. Recent Consultations (Prescriptions) Table
-          _buildRecentConsultationsTable(records),
-        ];
+            // 4. Recent Consultations (Prescriptions) Table
+            _buildRecentConsultationsTable(records),
+          ];
 
-        // Right Panel contents
-        final rightSection = [
-          // 1. Family Profiles Switcher Card
-          _buildFamilySwitcherCard(patient),
-          const SizedBox(height: 20),
+          // Right Panel contents
+          final rightSection = [
+            // 1. Family Profiles Switcher Card
+            _buildFamilySwitcherCard(patient),
+            const SizedBox(height: 20),
 
-          // 2. Queue Tracker Stepper Card
-          _buildQueueTrackerCard(inQueue, queueNumber, patientsAhead, isServing, isNear),
-          const SizedBox(height: 20),
+            // 2. Queue Tracker Stepper Card
+            _buildQueueTrackerCard(inQueue, queueNumber, patientsAhead, isServing, isNear),
+            const SizedBox(height: 20),
 
-          // 3. Health Stats Summary Cards (BP, HR, Sugar, Weight)
-          _buildHealthStatsWidget(),
-          const SizedBox(height: 20),
+            // 3. Health Stats Summary Cards (BP, HR, Sugar, Weight)
+            _buildHealthStatsWidget(),
+            const SizedBox(height: 20),
 
-          // 4. Book New Appointment Form Card
-          _buildBookAppointmentCard(),
-        ];
+            // 4. Book New Appointment Form Card
+            _buildBookAppointmentCard(),
+          ];
 
-        if (isDesktop) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 13,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: leftSection,
+          if (isDesktop) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(24.0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 13,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: leftSection,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 24),
-                Expanded(
-                  flex: 8,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: rightSection,
+                  const SizedBox(width: 24),
+                  Expanded(
+                    flex: 8,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: rightSection,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          );
-        } else {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ...leftSection,
-                const SizedBox(height: 24),
-                const Divider(),
-                const SizedBox(height: 16),
-                ...rightSection,
-              ],
-            ),
-          );
-        }
-      },
-    );
+                ],
+              ),
+            );
+          } else {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ...leftSection,
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  ...rightSection,
+                ],
+              ),
+            );
+          }
+        },
+      );
+    } else {
+      Widget activeWidget;
+      switch (widget.activeIndex) {
+        case 1:
+          activeWidget = _buildBookAppointmentCard();
+          break;
+        case 2:
+          activeWidget = _buildQueueTrackerCard(inQueue, queueNumber, patientsAhead, isServing, isNear);
+          break;
+        case 3:
+          activeWidget = _buildRecentConsultationsTable(records);
+          break;
+        case 4:
+          activeWidget = _buildFamilySwitcherCard(patient);
+          break;
+        case 5:
+          activeWidget = _buildHealthStatsWidget();
+          break;
+        default:
+          activeWidget = const Center(child: Text("Portal Section Coming Soon!"));
+      }
+
+      return Center(
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 650),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildWelcomeCard(patient),
+              const SizedBox(height: 20),
+              activeWidget,
+            ],
+          ),
+        ),
+      );
+    }
   }
 
   // --- UI Components ---

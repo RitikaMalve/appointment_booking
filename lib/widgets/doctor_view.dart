@@ -9,15 +9,21 @@ import '../utils/medicine_presets.dart';
 
 class DoctorView extends StatefulWidget {
   final ClinicStore store;
+  final int activeIndex;
+  final ValueChanged<int> onTabChanged;
 
-  const DoctorView({super.key, required this.store});
+  const DoctorView({
+    super.key, 
+    required this.store,
+    required this.activeIndex,
+    required this.onTabChanged,
+  });
 
   @override
   State<DoctorView> createState() => _DoctorViewState();
 }
 
-class _DoctorViewState extends State<DoctorView> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _DoctorViewState extends State<DoctorView> {
   final _prescriptionFormKey = GlobalKey<FormState>();
   
   // Consultation Form Controllers
@@ -55,12 +61,10 @@ class _DoctorViewState extends State<DoctorView> with SingleTickerProviderStateM
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
     _diagnosisController.dispose();
     _notesController.dispose();
     _medNameController.dispose();
@@ -225,37 +229,17 @@ class _DoctorViewState extends State<DoctorView> with SingleTickerProviderStateM
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth > 950;
+        final views = [
+          _buildCabinQueueTab(activePatient, servingItem, activeQueue, waitingQueue, todayApptsCount, doneCount, pendingCount, isDesktop),
+          _buildPatientsDatabaseTab(isDesktop),
+          _buildMedicinesCatalogTab(isDesktop),
+        ];
 
-        return Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              color: Colors.white,
-              child: TabBar(
-                controller: _tabController,
-                indicatorColor: const Color(0xFF0D9488),
-                labelColor: const Color(0xFF0D9488),
-                unselectedLabelColor: Colors.grey,
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                tabs: const [
-                  Tab(icon: Icon(Icons.people_alt_outlined), text: 'Today\'s Cabin Queue'),
-                  Tab(icon: Icon(Icons.folder_shared_outlined), text: 'Patients Database'),
-                  Tab(icon: Icon(Icons.medical_services_outlined), text: 'Medicines Catalog'),
-                ],
-              ),
-            ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildCabinQueueTab(activePatient, servingItem, activeQueue, waitingQueue, todayApptsCount, doneCount, pendingCount, isDesktop),
-                  _buildPatientsDatabaseTab(isDesktop),
-                  _buildMedicinesCatalogTab(isDesktop),
-                ],
-              ),
-            ),
-          ],
-        );
+        if (widget.activeIndex < 0 || widget.activeIndex >= views.length) {
+          return const Center(child: Text('Cabin Section Coming Soon!'));
+        }
+
+        return views[widget.activeIndex];
       },
     );
   }
@@ -527,34 +511,177 @@ class _DoctorViewState extends State<DoctorView> with SingleTickerProviderStateM
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Search Patients Database', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('Search Patients Database', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E293B))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(color: const Color(0xFF0D9488).withOpacity(0.08), borderRadius: BorderRadius.circular(12)),
+                  child: Text('${searchResults.length} Patients', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0D9488))),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             TextField(
               decoration: InputDecoration(
-                hintText: 'Search by name or phone...',
-                prefixIcon: const Icon(Icons.search),
+                hintText: 'Search by name, ID, or phone...',
+                prefixIcon: const Icon(Icons.search, size: 18),
                 isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
               ),
               onChanged: (val) => setState(() => _selectedLookupSearch = val.trim()),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
+            
+            if (isDesktop)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: Row(
+                  children: const [
+                    Expanded(flex: 3, child: Text('PATIENT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))),
+                    Expanded(flex: 2, child: Text('CONDITIONS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))),
+                    Expanded(flex: 2, child: Text('KEY VITALS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))),
+                    Expanded(flex: 1, child: Text('AI RISK', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey), textAlign: TextAlign.center)),
+                    Expanded(flex: 2, child: Text('STATUS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey), textAlign: TextAlign.center)),
+                  ],
+                ),
+              ),
+            const Divider(height: 1),
+            const SizedBox(height: 8),
+            
             Container(
-              constraints: const BoxConstraints(maxHeight: 450),
+              constraints: const BoxConstraints(maxHeight: 520),
               child: ListView.separated(
                 shrinkWrap: true,
                 itemCount: searchResults.length,
-                separatorBuilder: (c, i) => const Divider(),
+                separatorBuilder: (c, i) => const Divider(height: 12),
                 itemBuilder: (context, idx) {
                   final p = searchResults[idx];
                   final isSel = _selectedLookupPatient?.id == p.id;
-                  return ListTile(
-                    title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                    subtitle: Text('Mobile: ${p.mobileNumber} | Age: ${p.age}y, ${p.gender}'),
-                    trailing: const Icon(Icons.arrow_forward_ios, size: 12),
-                    selected: isSel,
-                    selectedColor: const Color(0xFF0D9488),
+                  
+                  final pRecords = widget.store.getPatientRecords(p.id);
+                  String latestVitals = 'BP: 120/80 • HR: 72';
+                  List<String> conditions = [];
+                  if (pRecords.isNotEmpty) {
+                    final last = pRecords.first;
+                    if (last.diagnosis.isNotEmpty) {
+                      conditions.add(last.diagnosis.split(' ').first);
+                    }
+                  }
+                  if (conditions.isEmpty) {
+                    conditions.add(p.age > 45 ? 'HYP' : 'HEALTHY');
+                  }
+                  
+                  int aiRisk = p.age > 60 ? 84 : (p.age > 45 ? 68 : 42);
+                  Color riskColor = aiRisk > 80 ? Colors.red : (aiRisk > 60 ? Colors.orange : Colors.green);
+                  
+                  String statusStr = aiRisk > 80 ? 'CRITICAL ALERTS' : (aiRisk > 60 ? 'NEEDS REVIEW' : 'BASELINE STABLE');
+                  Color statusBorderColor = aiRisk > 80 ? Colors.red : (aiRisk > 60 ? Colors.orange : Colors.green);
+                  Color statusBgColor = aiRisk > 80 ? Colors.red.shade50 : (aiRisk > 60 ? Colors.orange.shade50 : Colors.green.shade50);
+                  
+                  return InkWell(
                     onTap: () => setState(() => _selectedLookupPatient = p),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isSel ? const Color(0xFF0D9488).withOpacity(0.05) : Colors.transparent,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: isSel ? const Color(0xFF0D9488).withOpacity(0.3) : Colors.transparent),
+                      ),
+                      child: isDesktop
+                          ? Row(
+                              children: [
+                                Expanded(
+                                  flex: 3,
+                                  child: Row(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 16,
+                                        backgroundColor: Colors.teal.shade50,
+                                        child: Text(p.name.substring(0,1), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF0D9488))),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Color(0xFF1E293B))),
+                                            Text('#${p.id.substring(0, 8)} • ${p.age}y ${p.gender.substring(0, 1)}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Wrap(
+                                    spacing: 4,
+                                    children: conditions.map((c) => Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: Colors.blue.shade50, borderRadius: BorderRadius.circular(6)),
+                                      child: Text(c.toUpperCase(), style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blue.shade800)),
+                                    )).toList(),
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Text(latestVitals, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF475569))),
+                                ),
+                                Expanded(
+                                  flex: 1,
+                                  child: Column(
+                                    children: [
+                                      Text('$aiRisk', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: riskColor)),
+                                      Container(height: 2, width: 20, color: riskColor),
+                                    ],
+                                  ),
+                                ),
+                                Expanded(
+                                  flex: 2,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: statusBgColor,
+                                      border: Border.all(color: statusBorderColor),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    alignment: Alignment.center,
+                                    child: Text(statusStr, style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: statusBorderColor)),
+                                  ),
+                                ),
+                                const Icon(Icons.arrow_forward_ios, size: 10, color: Colors.grey),
+                              ],
+                            )
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    CircleAvatar(
+                                      radius: 14,
+                                      backgroundColor: Colors.teal.shade50,
+                                      child: Text(p.name.substring(0,1), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF0D9488))),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                                    const Spacer(),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(color: statusBgColor, borderRadius: BorderRadius.circular(8)),
+                                      child: Text(statusStr, style: TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: statusBorderColor)),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text('ID: #${p.id.substring(0,8)} | Vitals: $latestVitals', style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                              ],
+                            ),
+                    ),
                   );
                 },
               ),

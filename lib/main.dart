@@ -65,6 +65,7 @@ class _ClinicMainDashboardState extends State<ClinicMainDashboard> {
   bool _isLoggedIn = false;
   String _currentRole = ''; // 'receptionist', 'doctor', 'patient'
   String _currentPatientMobile = ''; // for patient portal login
+  int _activeSidebarIndex = 0; // tracks clickable sidebar menu tabs
 
   @override
   void initState() {
@@ -92,6 +93,7 @@ class _ClinicMainDashboardState extends State<ClinicMainDashboard> {
       _isLoggedIn = true;
       _currentRole = role;
       _currentPatientMobile = patientMobile;
+      _activeSidebarIndex = 0; // reset active sidebar view
     });
   }
 
@@ -100,6 +102,7 @@ class _ClinicMainDashboardState extends State<ClinicMainDashboard> {
       _isLoggedIn = false;
       _currentRole = '';
       _currentPatientMobile = '';
+      _activeSidebarIndex = 0;
     });
   }
 
@@ -139,6 +142,12 @@ class _ClinicMainDashboardState extends State<ClinicMainDashboard> {
             patientMobile: _currentPatientMobile,
             store: _store,
             onLogout: _logout,
+            activeIndex: _activeSidebarIndex,
+            onTabChanged: (idx) {
+              setState(() {
+                _activeSidebarIndex = idx;
+              });
+            },
             child: _buildCurrentView(),
           ),
         );
@@ -149,11 +158,35 @@ class _ClinicMainDashboardState extends State<ClinicMainDashboard> {
   Widget _buildCurrentView() {
     switch (_currentRole) {
       case 'receptionist':
-        return ReceptionistView(store: _store);
+        return ReceptionistView(
+          store: _store, 
+          activeIndex: _activeSidebarIndex,
+          onTabChanged: (idx) {
+            setState(() {
+              _activeSidebarIndex = idx;
+            });
+          },
+        );
       case 'doctor':
-        return DoctorView(store: _store);
+        return DoctorView(
+          store: _store,
+          activeIndex: _activeSidebarIndex,
+          onTabChanged: (idx) {
+            setState(() {
+              _activeSidebarIndex = idx;
+            });
+          },
+        );
       case 'patient':
-        return PatientView(store: _store);
+        return PatientView(
+          store: _store,
+          activeIndex: _activeSidebarIndex,
+          onTabChanged: (idx) {
+            setState(() {
+              _activeSidebarIndex = idx;
+            });
+          },
+        );
       default:
         return const Center(child: Text('Invalid View selected'));
     }
@@ -167,6 +200,8 @@ class CeilaResponsiveShell extends StatelessWidget {
   final ClinicStore store;
   final VoidCallback onLogout;
   final Widget child;
+  final int activeIndex;
+  final ValueChanged<int> onTabChanged;
 
   const CeilaResponsiveShell({
     super.key,
@@ -175,6 +210,8 @@ class CeilaResponsiveShell extends StatelessWidget {
     required this.store,
     required this.onLogout,
     required this.child,
+    required this.activeIndex,
+    required this.onTabChanged,
   });
 
   @override
@@ -346,28 +383,7 @@ class CeilaResponsiveShell extends StatelessWidget {
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-              children: [
-                const Text('MAIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
-                const SizedBox(height: 8),
-                _buildSidebarTile(Icons.dashboard_outlined, 'Dashboard', isActive: true),
-                _buildSidebarTile(Icons.calendar_month_outlined, 'Appointments', count: role == 'receptionist' ? 'New' : null),
-                _buildSidebarTile(Icons.chat_bubble_outline, 'Messages', count: '3'),
-                
-                const SizedBox(height: 24),
-                const Text('MEDICAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
-                const SizedBox(height: 8),
-                _buildSidebarTile(Icons.folder_shared_outlined, 'Medical Records'),
-                _buildSidebarTile(Icons.receipt_long_outlined, 'Prescriptions'),
-                _buildSidebarTile(Icons.payment_outlined, 'Billing'),
-                _buildSidebarTile(Icons.search_off_outlined, 'Find Doctors'),
-
-                const SizedBox(height: 24),
-                const Text('GENERAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
-                const SizedBox(height: 8),
-                _buildSidebarTile(Icons.notifications_none, 'Notifications'),
-                _buildSidebarTile(Icons.settings_outlined, 'Settings'),
-                _buildSidebarTile(Icons.help_outline, 'Support'),
-              ],
+              children: _buildRoleSidebarMenu(context, isDrawer),
             ),
           ),
 
@@ -419,7 +435,51 @@ class CeilaResponsiveShell extends StatelessWidget {
     );
   }
 
-  Widget _buildSidebarTile(IconData icon, String title, {bool isActive = false, String? count}) {
+  List<Widget> _buildRoleSidebarMenu(BuildContext context, bool isDrawer) {
+    if (role == 'receptionist') {
+      return [
+        const Text('MAIN', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+        const SizedBox(height: 8),
+        _buildSidebarTile(Icons.calendar_month_outlined, 'Appointments Workspace', 0, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.people_outline, 'Active Queue Dashboard', 1, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.person_add_outlined, 'Patient Registration', 2, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.medical_services_outlined, 'Medicine Inventory', 3, isDrawer: isDrawer, context: context),
+        const SizedBox(height: 24),
+        const Text('TELEHEALTH', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+        const SizedBox(height: 8),
+        _buildSidebarTile(Icons.chat_bubble_outline, 'Clinic Messages', -1, count: '3', isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.folder_shared_outlined, 'Archive Folders', -1, isDrawer: isDrawer, context: context),
+      ];
+    } else if (role == 'doctor') {
+      return [
+        const Text('CLINIC ROOM', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+        const SizedBox(height: 8),
+        _buildSidebarTile(Icons.people_alt_outlined, 'Today\'s Cabin Queue', 0, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.folder_shared_outlined, 'Patients Database', 1, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.medical_services_outlined, 'Medicines Catalog', 2, isDrawer: isDrawer, context: context),
+        const SizedBox(height: 24),
+        const Text('TELEHEALTH', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+        const SizedBox(height: 8),
+        _buildSidebarTile(Icons.chat_bubble_outline, 'Staff Chatroom', -1, count: 'New', isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.settings_outlined, 'Cabin Preferences', -1, isDrawer: isDrawer, context: context),
+      ];
+    } else {
+      // Patient Portal
+      return [
+        const Text('PATIENT PORTAL', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+        const SizedBox(height: 8),
+        _buildSidebarTile(Icons.dashboard_outlined, 'Portal Dashboard', 0, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.calendar_month_outlined, 'Book Appointment', 1, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.assignment_ind_outlined, 'Queue Live Tracker', 2, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.receipt_long_outlined, 'Prescriptions History', 3, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.people_outline, 'Family Profiles', 4, isDrawer: isDrawer, context: context),
+        _buildSidebarTile(Icons.favorite_border, 'Health Summary', 5, isDrawer: isDrawer, context: context),
+      ];
+    }
+  }
+
+  Widget _buildSidebarTile(IconData icon, String title, int tileIndex, {required bool isDrawer, required BuildContext context, String? count}) {
+    final bool isActive = tileIndex == activeIndex;
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
       decoration: BoxDecoration(
@@ -446,7 +506,16 @@ class CeilaResponsiveShell extends StatelessWidget {
         dense: true,
         visualDensity: const VisualDensity(vertical: -2),
         onTap: () {
-          // Dummy sidebar navigation actions
+          if (isDrawer) {
+            Navigator.pop(context); // Close mobile drawer
+          }
+          if (tileIndex >= 0) {
+            onTabChanged(tileIndex);
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Mock Telehealth feature coming soon!'), duration: Duration(seconds: 1)),
+            );
+          }
         },
       ),
     );
