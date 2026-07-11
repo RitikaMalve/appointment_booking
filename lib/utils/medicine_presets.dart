@@ -12,6 +12,26 @@ class MedicinePreset {
     required this.defaultDuration,
     required this.defaultInstructions,
   });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'category': category,
+      'defaultDosage': defaultDosage,
+      'defaultDuration': defaultDuration,
+      'defaultInstructions': defaultInstructions,
+    };
+  }
+
+  factory MedicinePreset.fromJson(Map<String, dynamic> json) {
+    return MedicinePreset(
+      name: json['name'] as String,
+      category: json['category'] as String,
+      defaultDosage: json['defaultDosage'] as String,
+      defaultDuration: json['defaultDuration'] as String,
+      defaultInstructions: json['defaultInstructions'] as String,
+    );
+  }
 }
 
 const List<MedicinePreset> medicinePresets = [

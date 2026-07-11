@@ -1,4 +1,5 @@
 class Patient {
+  final String id;
   final String mobileNumber;
   final String name;
   final int age;
@@ -9,6 +10,7 @@ class Patient {
   final DateTime registeredAt;
 
   Patient({
+    required this.id,
     required this.mobileNumber,
     required this.name,
     required this.age,
@@ -21,6 +23,7 @@ class Patient {
 
   Map<String, dynamic> toJson() {
     return {
+      'id': id,
       'mobileNumber': mobileNumber,
       'name': name,
       'age': age,
@@ -33,9 +36,12 @@ class Patient {
   }
 
   factory Patient.fromJson(Map<String, dynamic> json) {
+    final mobile = json['mobileNumber'] as String;
+    final name = json['name'] as String;
     return Patient(
-      mobileNumber: json['mobileNumber'] as String,
-      name: json['name'] as String,
+      id: json['id'] as String? ?? '${mobile}_${name.replaceAll(' ', '_')}',
+      mobileNumber: mobile,
+      name: name,
       age: json['age'] as int,
       address: json['address'] as String,
       dateOfBirth: DateTime.parse(json['dateOfBirth'] as String),
@@ -46,6 +52,7 @@ class Patient {
   }
 
   Patient copyWith({
+    String? id,
     String? mobileNumber,
     String? name,
     int? age,
@@ -56,6 +63,7 @@ class Patient {
     DateTime? registeredAt,
   }) {
     return Patient(
+      id: id ?? this.id,
       mobileNumber: mobileNumber ?? this.mobileNumber,
       name: name ?? this.name,
       age: age ?? this.age,

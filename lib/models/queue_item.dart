@@ -7,7 +7,7 @@ enum QueueStatus {
 
 class QueueItem {
   final String id;
-  final String patientMobile;
+  final String patientId;
   final int queueNumber;
   final DateTime entryTime;
   final QueueStatus status;
@@ -15,7 +15,7 @@ class QueueItem {
 
   QueueItem({
     required this.id,
-    required this.patientMobile,
+    required this.patientId,
     required this.queueNumber,
     required this.entryTime,
     required this.status,
@@ -25,7 +25,7 @@ class QueueItem {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'patientMobile': patientMobile,
+      'patientId': patientId,
       'queueNumber': queueNumber,
       'entryTime': entryTime.toIso8601String(),
       'status': status.name,
@@ -36,7 +36,7 @@ class QueueItem {
   factory QueueItem.fromJson(Map<String, dynamic> json) {
     return QueueItem(
       id: json['id'] as String,
-      patientMobile: json['patientMobile'] as String,
+      patientId: json['patientId'] as String? ?? (json['patientMobile'] as String? ?? ''),
       queueNumber: json['queueNumber'] as int,
       entryTime: DateTime.parse(json['entryTime'] as String),
       status: QueueStatus.values.byName(json['status'] as String),
@@ -46,7 +46,7 @@ class QueueItem {
 
   QueueItem copyWith({
     String? id,
-    String? patientMobile,
+    String? patientId,
     int? queueNumber,
     DateTime? entryTime,
     QueueStatus? status,
@@ -54,7 +54,7 @@ class QueueItem {
   }) {
     return QueueItem(
       id: id ?? this.id,
-      patientMobile: patientMobile ?? this.patientMobile,
+      patientId: patientId ?? this.patientId,
       queueNumber: queueNumber ?? this.queueNumber,
       entryTime: entryTime ?? this.entryTime,
       status: status ?? this.status,

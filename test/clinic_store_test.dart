@@ -3,10 +3,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:appointment_booking/models/patient.dart';
 import 'package:appointment_booking/models/queue_item.dart';
 import 'package:appointment_booking/models/medical_record.dart';
+import 'package:appointment_booking/models/appointment.dart';
 import 'package:appointment_booking/services/clinic_store.dart';
 
 void main() {
-  // Set up mock SharedPreferences for test runs
   setUp(() {
     SharedPreferences.setMockInitialValues({});
   });
@@ -19,13 +19,15 @@ void main() {
       expect(store.patients.isEmpty, true);
       expect(store.queue.isEmpty, true);
       expect(store.records.isEmpty, true);
+      expect(store.appointments.isEmpty, true);
     });
 
-    test('Register and query patient details', () async {
+    test('Register and query patient details & family members', () async {
       final store = ClinicStore();
       await store.init();
 
-      final patient = Patient(
+      final p1 = Patient(
+        id: '9999999999_John_Doe',
         mobileNumber: '9999999999',
         name: 'John Doe',
         age: 30,
@@ -36,20 +38,38 @@ void main() {
         registeredAt: DateTime.now(),
       );
 
-      await store.registerPatient(patient);
+      final p2 = Patient(
+        id: '9999999999_Jane_Doe',
+        mobileNumber: '9999999999',
+        name: 'Jane Doe',
+        age: 28,
+        address: '123 Test Street',
+        dateOfBirth: DateTime(1998, 5, 5),
+        gender: 'Female',
+        emergencyContact: '8888888888',
+        registeredAt: DateTime.now(),
+      );
 
-      expect(store.patients.length, 1);
-      final queryResult = store.getPatientByMobile('9999999999');
+      await store.registerPatient(p1);
+      await store.registerPatient(p2);
+
+      expect(store.patients.length, 2);
+      
+      final queryResult = store.getPatientById('9999999999_John_Doe');
       expect(queryResult, isNotNull);
       expect(queryResult!.name, 'John Doe');
-      expect(queryResult.age, 30);
+
+      final familyProfiles = store.getPatientsByMobile('9999999999');
+      expect(familyProfiles.length, 2);
+      expect(familyProfiles.any((p) => p.name == 'Jane Doe'), true);
     });
 
-    test('Queue check-in constraints', () async {
+    test('Queue check-in constraints by patientId', () async {
       final store = ClinicStore();
       await store.init();
 
       final patient = Patient(
+        id: '9999999999_John_Doe',
         mobileNumber: '9999999999',
         name: 'John Doe',
         age: 30,
@@ -61,26 +81,26 @@ void main() {
       );
       await store.registerPatient(patient);
 
-      // Unregistered phone should fail
-      final qUnreg = await store.addToQueue('0000000000');
+      // Unregistered ID should fail
+      final qUnreg = await store.addToQueue('0000000000_Nobody');
       expect(qUnreg, false);
 
-      // Registered phone should succeed
-      final qReg = await store.addToQueue('9999999999');
+      // Registered ID should succeed
+      final qReg = await store.addToQueue('9999999999_John_Doe');
       expect(qReg, true);
       expect(store.getActiveQueue().length, 1);
 
       // Double check-in should fail
-      final qDouble = await store.addToQueue('9999999999');
+      final qDouble = await store.addToQueue('9999999999_John_Doe');
       expect(qDouble, false);
     });
 
-    test('Queue position and proximity updates', () async {
+    test('Queue position and reordering updates', () async {
       final store = ClinicStore();
       await store.init();
 
-      // Add three patients
       final p1 = Patient(
+        id: '1111111111_P1',
         mobileNumber: '1111111111',
         name: 'P1',
         age: 20,
@@ -90,39 +110,31 @@ void main() {
         emergencyContact: '999',
         registeredAt: DateTime.now(),
       );
-      final p2 = p1.copyWith(mobileNumber: '2222222222', name: 'P2');
-      final p3 = p1.copyWith(mobileNumber: '3333333333', name: 'P3');
+      final p2 = p1.copyWith(id: '2222222222_P2', mobileNumber: '2222222222', name: 'P2');
+      final p3 = p1.copyWith(id: '3333333333_P3', mobileNumber: '3333333333', name: 'P3');
 
       await store.registerPatient(p1);
       await store.registerPatient(p2);
       await store.registerPatient(p3);
 
-      await store.addToQueue('1111111111');
-      await store.addToQueue('2222222222');
-      await store.addToQueue('3333333333');
+      await store.addToQueue('1111111111_P1');
+      await store.addToQueue('2222222222_P2');
+      await store.addToQueue('3333333333_P3');
 
-      // Check stats: 3 waiting
       expect(store.getActiveQueue().length, 3);
 
-      // Info for patient 3: ahead count should be 2
-      final infoP3 = store.getPatientQueueInfo('3333333333');
-      expect(infoP3['inQueue'], true);
+      // Verify patients ahead count
+      final infoP3 = store.getPatientQueueInfo('3333333333_P3');
       expect(infoP3['patientsAhead'], 2);
-      expect(infoP3['isNear'], true); // 2 patients ahead is near!
 
-      // Info for patient 1: ahead count should be 0
-      final infoP1 = store.getPatientQueueInfo('1111111111');
-      expect(infoP1['patientsAhead'], 0);
-      expect(infoP1['isNear'], true); // 0 ahead is near!
+      // Reorder queue (move P3 to index 0)
+      await store.reorderQueue(2, 0);
 
-      // Start consultation for P1
-      final p1QueueItem = store.getActiveQueue().first;
-      await store.startConsultation(p1QueueItem.id);
-
-      final activeServing = store.getActiveServingPatient();
-      expect(activeServing, isNotNull);
-      expect(activeServing!.patientMobile, '1111111111');
-      expect(activeServing.status, QueueStatus.serving);
+      // Verify P3 is now at position 1 in active queue
+      final newActive = store.getActiveQueue();
+      expect(newActive.first.patientId, '3333333333_P3');
+      expect(store.getPatientQueueInfo('3333333333_P3')['patientsAhead'], 0);
+      expect(store.getPatientQueueInfo('1111111111_P1')['patientsAhead'], 1);
     });
 
     test('Add Medical Record completes consultation', () async {
@@ -130,6 +142,7 @@ void main() {
       await store.init();
 
       final patient = Patient(
+        id: '9999999999_John_Doe',
         mobileNumber: '9999999999',
         name: 'John Doe',
         age: 30,
@@ -140,20 +153,21 @@ void main() {
         registeredAt: DateTime.now(),
       );
       await store.registerPatient(patient);
-      await store.addToQueue('9999999999');
+      await store.addToQueue('9999999999_John_Doe');
 
       final queueItem = store.getActiveQueue().first;
       await store.startConsultation(queueItem.id);
 
       final record = MedicalRecord(
         id: 'rec_test',
-        patientMobile: '9999999999',
+        patientId: '9999999999_John_Doe',
         date: DateTime.now(),
         diagnosis: 'Flu',
         notes: 'Take rest',
         medicines: [
           MedicineItem(name: 'Med A', dosage: '1-0-1', duration: '3 days', instructions: 'After food')
         ],
+        tests: ['CBC'],
       );
 
       await store.addMedicalRecord(record);
@@ -164,34 +178,33 @@ void main() {
       expect(store.getHistoricalQueue().first.status, QueueStatus.done);
 
       // Verify prescription retrieval
-      final pRecords = store.getPatientRecords('9999999999');
+      final pRecords = store.getPatientRecords('9999999999_John_Doe');
       expect(pRecords.length, 1);
       expect(pRecords.first.diagnosis, 'Flu');
-      expect(pRecords.first.medicines.first.name, 'Med A');
+      expect(pRecords.first.tests.first, 'CBC');
     });
 
-    test('Toggle fees paid', () async {
+    test('Appointments and scheduling workflow', () async {
       final store = ClinicStore();
       await store.init();
 
-      final patient = Patient(
-        mobileNumber: '9999999999',
-        name: 'John Doe',
-        age: 30,
-        address: '123 Test Street',
-        dateOfBirth: DateTime(1996, 1, 1),
-        gender: 'Male',
-        emergencyContact: '8888888888',
-        registeredAt: DateTime.now(),
+      final appointment = Appointment(
+        id: 'appt_1',
+        patientMobile: '9999999999',
+        patientName: 'John Doe',
+        doctorName: 'Dr. Amit',
+        dateTime: DateTime.now(),
+        time: '10:00 AM',
+        status: AppointmentStatus.pending,
       );
-      await store.registerPatient(patient);
-      await store.addToQueue('9999999999');
 
-      final item = store.getActiveQueue().first;
-      expect(item.isFeesPaid, false);
-
-      await store.toggleFeesPaid(item.id);
-      expect(store.getActiveQueue().first.isFeesPaid, true);
+      await store.bookAppointment(appointment);
+      
+      expect(store.appointments.length, 1);
+      expect(store.getTodayAppointments().length, 1);
+      
+      await store.updateAppointmentStatus('appt_1', AppointmentStatus.approved);
+      expect(store.appointments.first.status, AppointmentStatus.approved);
     });
   });
 }

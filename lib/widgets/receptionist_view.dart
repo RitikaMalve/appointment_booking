@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/patient.dart';
 import '../models/queue_item.dart';
+import '../models/appointment.dart';
+import '../utils/medicine_presets.dart';
 import '../services/clinic_store.dart';
 
 class ReceptionistView extends StatefulWidget {
@@ -14,8 +16,10 @@ class ReceptionistView extends StatefulWidget {
 }
 
 class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerProviderStateMixin {
+  late TabController _tabController;
+
+  // Registration Form Keys & Controllers
   final _formKey = GlobalKey<FormState>();
-  
   final _mobileController = TextEditingController();
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
@@ -25,67 +29,74 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
   DateTime? _selectedDob;
   String _selectedGender = 'Male';
   bool _isExistingPatient = false;
-  
-  late TabController _tabController;
+  List<Patient> _nameSuggestions = [];
+
+  // Medicine Inventory Form Controllers
+  final _medNameController = TextEditingController();
+  final _medCategoryController = TextEditingController(text: 'Pain & Fever');
+  final _medDosageController = TextEditingController(text: '1-0-1');
+  final _medDurationController = TextEditingController(text: '5 days');
+  final _medInstructionsController = TextEditingController(text: 'After food');
+  String? _editingMedName;
 
   @override
   void initState() {
     super.initState();
-    _mobileController.addListener(_onMobileChanged);
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
+    _nameController.addListener(_onNameChanged);
   }
 
   @override
   void dispose() {
     _tabController.dispose();
-    _mobileController.removeListener(_onMobileChanged);
+    _nameController.removeListener(_onNameChanged);
     _mobileController.dispose();
     _nameController.dispose();
     _ageController.dispose();
     _addressController.dispose();
     _emergencyContactController.dispose();
+    _medNameController.dispose();
+    _medCategoryController.dispose();
+    _medDosageController.dispose();
+    _medDurationController.dispose();
+    _medInstructionsController.dispose();
     super.dispose();
   }
 
-  // Real-time lookup of mobile number to see if patient is new or existing
-  void _onMobileChanged() {
-    final query = _mobileController.text.trim();
-    if (query.length >= 10) {
-      final existing = widget.store.getPatientByMobile(query);
-      if (existing != null) {
-        if (!_isExistingPatient) {
-          setState(() {
-            _isExistingPatient = true;
-            _nameController.text = existing.name;
-            _ageController.text = existing.age.toString();
-            _addressController.text = existing.address;
-            _emergencyContactController.text = existing.emergencyContact;
-            _selectedDob = existing.dateOfBirth;
-            _selectedGender = existing.gender;
-          });
-        }
-      } else {
-        if (_isExistingPatient) {
-          setState(() {
-            _isExistingPatient = false;
-            _clearRegistrationFields(keepMobile: true);
-          });
-        }
-      }
+  // Type-ahead name lookup
+  void _onNameChanged() {
+    final query = _nameController.text.trim();
+    if (query.length >= 2) {
+      final matches = widget.store.searchPatientsByName(query);
+      setState(() {
+        _nameSuggestions = matches;
+      });
     } else {
-      if (_isExistingPatient) {
-        setState(() {
-          _isExistingPatient = false;
-          _clearRegistrationFields(keepMobile: true);
-        });
-      }
+      setState(() {
+        _nameSuggestions = [];
+      });
     }
   }
 
-  void _clearRegistrationFields({bool keepMobile = false}) {
-    if (!keepMobile) {
-      _mobileController.clear();
-    }
+  void _autofillPatientDetails(Patient p) {
+    setState(() {
+      _isExistingPatient = true;
+      _mobileController.text = p.mobileNumber;
+      _nameController.text = p.name;
+      _ageController.text = p.age.toString();
+      _addressController.text = p.address;
+      _emergencyContactController.text = p.emergencyContact;
+      _selectedDob = p.dateOfBirth;
+      _selectedGender = p.gender;
+      _nameSuggestions = [];
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Autofilled profile for ${p.name}!')),
+    );
+  }
+
+  void _clearRegistrationFields() {
+    _mobileController.clear();
     _nameController.clear();
     _ageController.clear();
     _addressController.clear();
@@ -94,6 +105,7 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
       _selectedDob = null;
       _selectedGender = 'Male';
       _isExistingPatient = false;
+      _nameSuggestions = [];
     });
   }
 
@@ -107,7 +119,6 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
     if (picked != null && picked != _selectedDob) {
       setState(() {
         _selectedDob = picked;
-        // Auto-calculate age
         final age = DateTime.now().year - picked.year;
         _ageController.text = age.toString();
       });
@@ -129,7 +140,12 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
     final address = _addressController.text.trim();
     final emergency = _emergencyContactController.text.trim();
 
+    final pId = _isExistingPatient 
+        ? (widget.store.getPatientsByMobile(mobile).firstWhere((p) => p.name.toLowerCase() == name.toLowerCase()).id)
+        : '${mobile}_${name.replaceAll(' ', '_')}';
+
     final patient = Patient(
+      id: pId,
       mobileNumber: mobile,
       name: name,
       age: age,
@@ -137,29 +153,23 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
       dateOfBirth: _selectedDob!,
       gender: _selectedGender,
       emergencyContact: emergency,
-      registeredAt: _isExistingPatient 
-          ? (widget.store.getPatientByMobile(mobile)?.registeredAt ?? DateTime.now())
-          : DateTime.now(),
+      registeredAt: DateTime.now(),
     );
 
-    // Save/Update in store
     widget.store.registerPatient(patient);
 
     if (andQueue) {
-      widget.store.addToQueue(mobile).then((success) {
+      widget.store.addToQueue(patient.id).then((success) {
         if (!mounted) return;
         if (success) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$name added to the queue list!')),
+            SnackBar(content: Text('$name added to live queue!')),
           );
           _clearRegistrationFields();
-          final isDesktop = MediaQuery.of(context).size.width >= 850;
-          if (!isDesktop) {
-            _tabController.animateTo(1);
-          }
+          _tabController.animateTo(1); // switch to Queue
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('$name is already active in the queue.')),
+            SnackBar(content: Text('$name is already active in queue.')),
           );
         }
       });
@@ -171,740 +181,738 @@ class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerPr
     }
   }
 
+  // --- Medicine Manager Actions ---
+
+  void _saveMedicineItem() {
+    final name = _medNameController.text.trim();
+    final category = _medCategoryController.text.trim();
+    final dosage = _medDosageController.text.trim();
+    final duration = _medDurationController.text.trim();
+    final instructions = _medInstructionsController.text.trim();
+
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Medicine Name is required')));
+      return;
+    }
+
+    final newItem = MedicinePreset(
+      name: name,
+      category: category,
+      defaultDosage: dosage,
+      defaultDuration: duration,
+      defaultInstructions: instructions,
+    );
+
+    if (_editingMedName != null) {
+      widget.store.updateMasterMedicine(_editingMedName!, newItem);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Medicine updated in inventory!')));
+    } else {
+      widget.store.addMasterMedicine(newItem);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Medicine added to inventory!')));
+    }
+
+    _clearMedicineForm();
+  }
+
+  void _clearMedicineForm() {
+    _medNameController.clear();
+    setState(() {
+      _medCategoryController.text = 'Pain & Fever';
+      _medDosageController.text = '1-0-1';
+      _medDurationController.text = '5 days';
+      _medInstructionsController.text = 'After food';
+      _editingMedName = null;
+    });
+  }
+
+  void _editMedicine(MedicinePreset med) {
+    setState(() {
+      _editingMedName = med.name;
+      _medNameController.text = med.name;
+      _medCategoryController.text = med.category;
+      _medDosageController.text = med.defaultDosage;
+      _medDurationController.text = med.defaultDuration;
+      _medInstructionsController.text = med.defaultInstructions;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final activeQueue = widget.store.getActiveQueue();
     final historyQueue = widget.store.getHistoricalQueue();
+    final allAppointments = widget.store.appointments;
+    final todayAppts = widget.store.getTodayAppointments();
 
-    // Stats
-    final totalWaiting = activeQueue.where((item) => item.status == QueueStatus.waiting).length;
-    final currentlyServing = activeQueue.where((item) => item.status == QueueStatus.serving).length;
-    final completedCount = historyQueue.where((item) => item.status == QueueStatus.done).length;
+    final pendingAppts = allAppointments.where((a) => a.status == AppointmentStatus.pending).toList();
+    final approvedAppts = allAppointments.where((a) => a.status == AppointmentStatus.approved).toList();
+    final waitingQueue = activeQueue.where((item) => item.status == QueueStatus.waiting).toList();
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isDesktop = constraints.maxWidth > 900;
-        
-        final registrationForm = Card(
-          elevation: 2,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Form(
-              key: _formKey,
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Patient Registration',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Theme.of(context).colorScheme.primary,
-                              ),
-                        ),
-                        // Registration status badge
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: _isExistingPatient 
-                                ? Colors.teal.shade50 
-                                : Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: _isExistingPatient 
-                                  ? Colors.teal.shade300 
-                                  : Colors.blue.shade300,
-                            ),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _isExistingPatient ? Icons.check_circle : Icons.person_add,
-                                size: 16,
-                                color: _isExistingPatient ? Colors.teal.shade800 : Colors.blue.shade800,
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                _isExistingPatient ? 'Existing Patient' : 'New Patient',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: _isExistingPatient ? Colors.teal.shade800 : Colors.blue.shade800,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    
-                    // Mobile Number Field
-                    TextFormField(
-                      controller: _mobileController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        labelText: 'Mobile Number',
-                        prefixIcon: const Icon(Icons.phone),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                        hintText: 'Enter 10-digit number',
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'Mobile is required';
-                        if (value.length < 10) return 'Enter a valid mobile number';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
 
-                    // Name Field
-                    TextFormField(
-                      controller: _nameController,
-                      decoration: InputDecoration(
-                        labelText: 'Full Name',
-                        prefixIcon: const Icon(Icons.person),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'Name is required';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    Row(
-                      children: [
-                        // Age Field
-                        Expanded(
-                          child: TextFormField(
-                            controller: _ageController,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'Age',
-                              prefixIcon: const Icon(Icons.calendar_today),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) return 'Required';
-                              if (int.tryParse(value) == null) return 'Must be number';
-                              return null;
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Gender Dropdown
-                        Expanded(
-                          child: DropdownButtonFormField<String>(
-                            initialValue: _selectedGender,
-                            decoration: InputDecoration(
-                              labelText: 'Gender',
-                              prefixIcon: const Icon(Icons.wc),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            items: const [
-                              DropdownMenuItem(value: 'Male', child: Text('Male')),
-                              DropdownMenuItem(value: 'Female', child: Text('Female')),
-                              DropdownMenuItem(value: 'Other', child: Text('Other')),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) setState(() => _selectedGender = val);
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Date of Birth Field (with date picker)
-                    InkWell(
-                      onTap: () => _selectDob(context),
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade400),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(Icons.cake, color: Colors.grey),
-                                const SizedBox(width: 10),
-                                Text(
-                                  _selectedDob == null
-                                      ? 'Select Date of Birth'
-                                      : 'DOB: ${DateFormat('yyyy-MM-dd').format(_selectedDob!)}',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    color: _selectedDob == null ? Colors.grey.shade600 : Colors.black,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const Icon(Icons.arrow_drop_down),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Address Field
-                    TextFormField(
-                      controller: _addressController,
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        labelText: 'Address',
-                        prefixIcon: const Icon(Icons.home),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'Address is required';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Emergency Contact
-                    TextFormField(
-                      controller: _emergencyContactController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        labelText: 'Emergency Contact Number',
-                        prefixIcon: const Icon(Icons.contact_phone),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      validator: (value) {
-                        if (value == null || value.isEmpty) return 'Emergency contact is required';
-                        if (value.length < 10) return 'Enter a valid phone number';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 24),
-
-                    // Form Buttons
-                    Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () => _clearRegistrationFields(),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: const Text('Clear'),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          flex: 2,
-                          child: ElevatedButton(
-                            onPressed: () => _registerAndOrAddToQueue(andQueue: true),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Theme.of(context).colorScheme.primary,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: const Text(
-                              'Register & Add to Q',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    // Only Register (Not Queued)
-                    SizedBox(
-                      width: double.infinity,
-                      child: TextButton(
-                        onPressed: () => _registerAndOrAddToQueue(andQueue: false),
-                        child: const Text('Just Register Patient (No Queue)'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+        // Common Header Panel
+        final dashboardHeader = Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          color: Colors.white,
+          child: TabBar(
+            controller: _tabController,
+            isScrollable: true,
+            indicatorColor: const Color(0xFF0D9488),
+            labelColor: const Color(0xFF0D9488),
+            unselectedLabelColor: Colors.grey,
+            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+            tabs: const [
+              Tab(icon: Icon(Icons.calendar_month_outlined), text: 'Appointments'),
+              Tab(icon: Icon(Icons.people_outline), text: 'Queue Manager'),
+              Tab(icon: Icon(Icons.person_add_outlined), text: 'Patient Registration'),
+              Tab(icon: Icon(Icons.medical_services_outlined), text: 'Medicine Inventory'),
+            ],
           ),
         );
 
-        final queueDashboard = Column(
+        // Render contents based on tabs
+        return Column(
           children: [
-            // Stats Row
-            Row(
-              children: [
-                _buildStatCard(context, 'Waiting', '$totalWaiting Patients', Icons.hourglass_empty, Colors.orange),
-                const SizedBox(width: 12),
-                _buildStatCard(context, 'In Consult', '$currentlyServing Patients', Icons.medical_services, Colors.teal),
-                const SizedBox(width: 12),
-                _buildStatCard(context, 'Completed', '$completedCount Today', Icons.check_circle, Colors.blue),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Active Queue & Completed List Tabs
+            dashboardHeader,
             Expanded(
-              child: DefaultTabController(
-                length: 2,
-                child: Column(
-                  children: [
-                    const TabBar(
-                      tabs: [
-                        Tab(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.queue),
-                              SizedBox(width: 8),
-                              Text('Active Queue'),
-                            ],
-                          ),
-                        ),
-                        Tab(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.history),
-                              SizedBox(width: 8),
-                              Text('Done & Skipped'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Expanded(
-                      child: TabBarView(
-                        children: [
-                          _buildActiveQueueList(activeQueue),
-                          _buildHistoricalQueueList(historyQueue),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+              child: TabBarView(
+                controller: _tabController,
+                children: [
+                  _buildAppointmentsTab(pendingAppts, approvedAppts, todayAppts),
+                  _buildQueueManagerTab(activeQueue, historyQueue, waitingQueue, isDesktop),
+                  _buildRegistrationTab(isDesktop),
+                  _buildMedicineInventoryTab(isDesktop),
+                ],
               ),
             ),
           ],
         );
-
-        if (isDesktop) {
-          return Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  flex: 5,
-                  child: SizedBox(height: double.infinity, child: registrationForm),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 6,
-                  child: SizedBox(height: double.infinity, child: queueDashboard),
-                ),
-              ],
-            ),
-          );
-        } else {
-          return Column(
-            children: [
-              Container(
-                color: Colors.white,
-                child: TabBar(
-                  controller: _tabController,
-                  indicatorColor: Theme.of(context).colorScheme.primary,
-                  labelColor: Theme.of(context).colorScheme.primary,
-                  unselectedLabelColor: Colors.grey,
-                  tabs: const [
-                    Tab(icon: Icon(Icons.person_add_alt_1_outlined), text: 'Registration'),
-                    Tab(icon: Icon(Icons.dashboard_customize_outlined), text: 'Queue & Stats'),
-                  ],
-                ),
-              ),
-              Expanded(
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: registrationForm,
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: queueDashboard,
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        }
       },
     );
   }
 
-  Widget _buildStatCard(BuildContext context, String label, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Card(
-        elevation: 1,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-          child: Column(
+  // --- TAB 1: Appointments Workspace ---
+  Widget _buildAppointmentsTab(List<Appointment> pending, List<Appointment> approved, List<Appointment> today) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                textAlign: TextAlign.center,
-              ),
+              _buildMetricSummaryCard('Pending Approvals', pending.length.toString(), Colors.orange),
+              const SizedBox(width: 12),
+              _buildMetricSummaryCard('Approved Slots', approved.length.toString(), Colors.green),
+              const SizedBox(width: 12),
+              _buildMetricSummaryCard('Today\'s Schedule', today.length.toString(), Colors.teal),
             ],
           ),
-        ),
+          const SizedBox(height: 24),
+          const Text('Pending Appointment Requests', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+          const SizedBox(height: 8),
+          Container(
+            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
+            child: pending.isEmpty
+                ? const Padding(
+                    padding: EdgeInsets.all(24.0),
+                    child: Center(child: Text('No pending appointment requests.', style: TextStyle(color: Colors.grey))),
+                  )
+                : ListView.separated(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: pending.length,
+                    separatorBuilder: (c, i) => const Divider(height: 1),
+                    itemBuilder: (context, idx) {
+                      final app = pending[idx];
+                      return ListTile(
+                        title: Text(app.patientName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                        subtitle: Text('Consultant: ${app.doctorName} | Date: ${DateFormat('dd-MM-yyyy').format(app.dateTime)} | Time: ${app.time}'),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            ElevatedButton(
+                              onPressed: () {
+                                widget.store.updateAppointmentStatus(app.id, AppointmentStatus.approved);
+                                // Auto checkin patient to queue list
+                                final p = widget.store.getPatientsByMobile(app.patientMobile).firstWhere((pat) => pat.name == app.patientName);
+                                widget.store.addToQueue(p.id);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Appointment approved & token generated for ${app.patientName}!')));
+                              },
+                              style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white, elevation: 0),
+                              child: const Text('Accept'),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton(
+                              onPressed: () {
+                                widget.store.updateAppointmentStatus(app.id, AppointmentStatus.rejected);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Appointment rejected for ${app.patientName}.')));
+                              },
+                              style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
+                              child: const Text('Reject'),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildActiveQueueList(List<QueueItem> activeQueue) {
-    if (activeQueue.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.people_outline, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            const Text('No patients in the active queue', style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: activeQueue.length,
-      itemBuilder: (context, index) {
-        final item = activeQueue[index];
-        final patient = widget.store.getPatientByMobile(item.patientMobile);
-        if (patient == null) return const SizedBox.shrink();
-
-        final bool isServing = item.status == QueueStatus.serving;
-        // The first "waiting" patient in queue is the next in line
-        final waitingList = activeQueue.where((q) => q.status == QueueStatus.waiting).toList();
-        final bool isNext = waitingList.isNotEmpty && waitingList.first.id == item.id;
-
-        Color cardBorderColor = Colors.grey.shade200;
-        Color cardBgColor = Colors.white;
-        Widget? statusBadge;
-
-        if (isServing) {
-          cardBorderColor = Colors.teal.shade300;
-          cardBgColor = Colors.teal.shade50.withOpacity(0.5);
-          statusBadge = Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.teal.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.medical_services, size: 12, color: Colors.teal.shade800),
-                const SizedBox(width: 4),
-                Text(
-                  'IN VISIT',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.teal.shade800),
-                ),
-              ],
-            ),
-          );
-        } else if (isNext) {
-          cardBorderColor = Colors.orange.shade400;
-          cardBgColor = Colors.orange.shade50.withOpacity(0.25);
-          statusBadge = Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.orange.shade100,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.star, size: 12, color: Colors.orange.shade800),
-                const SizedBox(width: 4),
-                Text(
-                  'NEXT IN LINE',
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.orange.shade800),
-                ),
-              ],
-            ),
-          );
-        }
-
-        return Card(
-          elevation: isServing || isNext ? 2 : 0,
-          margin: const EdgeInsets.only(bottom: 10),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: cardBorderColor, width: isServing || isNext ? 2.0 : 1.0),
-          ),
-          color: cardBgColor,
-          child: Padding(
-            padding: const EdgeInsets.all(12.0),
-            child: Row(
-              children: [
-                // Queue Number Circle
-                Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: isServing 
-                        ? Colors.teal.shade500 
-                        : (isNext ? Colors.orange.shade500 : Colors.blue.shade500),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '#${item.queueNumber}',
-                      style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-
-                // Patient Details
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+  // --- TAB 2: Queue Reordering Manager ---
+  Widget _buildQueueManagerTab(List<QueueItem> active, List<QueueItem> history, List<QueueItem> waiting, bool isDesktop) {
+    final listContent = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Manage Live Queue Positions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+        const SizedBox(height: 4),
+        const Text('Drag and drop rows or use action buttons to adjust position priorities. Tokens renumber automatically.', style: TextStyle(color: Colors.grey, fontSize: 12)),
+        const SizedBox(height: 12),
+        Container(
+          height: 450,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
+          child: active.isEmpty
+              ? const Center(child: Text('No active patients in clinic today.', style: TextStyle(color: Colors.grey)))
+              : ReorderableListView.builder(
+                  buildDefaultDragHandles: true,
+                  itemCount: active.length,
+                  onReorder: (oldIdx, newIdx) {
+                    widget.store.reorderQueue(oldIdx, newIdx);
+                  },
+                  itemBuilder: (context, idx) {
+                    final item = active[idx];
+                    final patient = widget.store.getPatientById(item.patientId);
+                    if (patient == null) return SizedBox(key: ValueKey(item.id));
+                    final bool isServ = item.status == QueueStatus.serving;
+                    return ListTile(
+                      key: ValueKey(item.id),
+                      leading: CircleAvatar(
+                        backgroundColor: isServ ? Colors.teal : Colors.blue,
+                        child: Text('#${item.queueNumber}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+                      ),
+                      title: Text(patient.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text('Mobile: ${patient.mobileNumber} | Status: ${item.status.name.toUpperCase()}'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Flexible(
-                            child: Text(
-                              patient.name,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                              overflow: TextOverflow.ellipsis,
+                          if (idx > 0)
+                            IconButton(
+                              icon: const Icon(Icons.arrow_upward, size: 18, color: Colors.blue),
+                              onPressed: () => widget.store.reorderQueue(idx, idx - 1),
                             ),
-                          ),
-                          if (statusBadge != null) ...[
-                            const SizedBox(width: 8),
-                            statusBadge,
-                          ],
+                          if (idx < active.length - 1)
+                            IconButton(
+                              icon: const Icon(Icons.arrow_downward, size: 18, color: Colors.blue),
+                              onPressed: () => widget.store.reorderQueue(idx, idx + 2),
+                            ),
+                          const SizedBox(width: 8),
+                          IconButton(
+                            icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
+                            onPressed: () {
+                              widget.store.updateQueueItemStatus(item.id, QueueStatus.skipped);
+                            },
+                          )
                         ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Phone: ${patient.mobileNumber} • ${patient.gender}, ${patient.age}y',
-                        style: const TextStyle(fontSize: 13, color: Colors.black54),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Entry: ${DateFormat('hh:mm a').format(item.entryTime)}',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
+        )
+      ],
+    );
 
-                // Actions & Fees Paid status
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    // Fees Paid Button
-                    InkWell(
-                      onTap: () => widget.store.toggleFeesPaid(item.id),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: item.isFeesPaid ? Colors.green.shade50 : Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: item.isFeesPaid ? Colors.green.shade300 : Colors.red.shade300),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              item.isFeesPaid ? Icons.check_circle_outline : Icons.highlight_off,
-                              size: 14,
-                              color: item.isFeesPaid ? Colors.green.shade700 : Colors.red.shade700,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              item.isFeesPaid ? 'Fees Paid' : 'Unpaid',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: item.isFeesPaid ? Colors.green.shade800 : Colors.red.shade800,
-                              ),
-                            ),
-                          ],
-                        ),
+    final statsPanel = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Completed / Skipped today', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+        const SizedBox(height: 12),
+        Container(
+          height: 450,
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: Colors.grey.shade100)),
+          child: history.isEmpty
+              ? const Center(child: Text('No history logs yet.', style: TextStyle(color: Colors.grey)))
+              : ListView.separated(
+                  itemCount: history.length,
+                  separatorBuilder: (c, i) => const Divider(height: 1),
+                  itemBuilder: (context, idx) {
+                    final item = history.reversed.toList()[idx];
+                    final patient = widget.store.getPatientById(item.patientId);
+                    if (patient == null) return const SizedBox.shrink();
+                    final isDone = item.status == QueueStatus.done;
+                    return ListTile(
+                      title: Text(patient.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                      subtitle: Text('#${item.queueNumber} • ${isDone ? 'Completed' : 'Skipped'}'),
+                      trailing: ElevatedButton.icon(
+                        onPressed: () {
+                          widget.store.addToQueue(patient.id);
+                        },
+                        icon: const Icon(Icons.replay, size: 10),
+                        label: const Text('Re-add', style: TextStyle(fontSize: 10)),
+                        style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2)),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    // Action Popup
-                    Row(
-                      children: [
-                        if (isNext || (!isServing && activeQueue.every((q) => q.status != QueueStatus.serving))) 
-                          IconButton(
-                            icon: const Icon(Icons.arrow_circle_right_outlined, color: Colors.teal),
-                            tooltip: 'Send to Doctor',
-                            onPressed: () {
-                              widget.store.startConsultation(item.id);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('${patient.name} sent to Doctor\'s cabin.')),
-                              );
-                            },
-                          ),
-                        IconButton(
-                          icon: const Icon(Icons.cancel_outlined, color: Colors.redAccent),
-                          tooltip: 'Skip/Remove Patient',
-                          onPressed: () {
-                            widget.store.updateQueueItemStatus(item.id, QueueStatus.skipped);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('${patient.name} skipped and removed from active queue.')),
-                            );
-                          },
-                        ),
-                      ],
-                    )
-                  ],
+                    );
+                  },
                 ),
+        ),
+      ],
+    );
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20.0),
+      child: isDesktop
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 12, child: listContent),
+                const SizedBox(width: 24),
+                Expanded(flex: 8, child: statsPanel),
+              ],
+            )
+          : Column(
+              children: [
+                listContent,
+                const SizedBox(height: 24),
+                statsPanel,
               ],
             ),
-          ),
-        );
-      },
     );
   }
 
-  Widget _buildHistoricalQueueList(List<QueueItem> historyQueue) {
-    if (historyQueue.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 64, color: Colors.grey.shade400),
-            const SizedBox(height: 16),
-            const Text('No historical patients today', style: TextStyle(color: Colors.grey)),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      itemCount: historyQueue.length,
-      itemBuilder: (context, index) {
-        // Show newest history first
-        final item = historyQueue.reversed.toList()[index];
-        final patient = widget.store.getPatientByMobile(item.patientMobile);
-        if (patient == null) return const SizedBox.shrink();
-
-        final bool isDone = item.status == QueueStatus.done;
-
-        return Card(
-          elevation: 0,
-          margin: const EdgeInsets.only(bottom: 8),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-            side: BorderSide(color: Colors.grey.shade300),
-          ),
-          color: Colors.grey.shade50,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-            child: Row(
+  // --- TAB 3: Patient Registration with suggestions and auto-fill ---
+  Widget _buildRegistrationTab(bool isDesktop) {
+    final formColumn = Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade100)),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircleAvatar(
-                  radius: 18,
-                  backgroundColor: isDone ? Colors.blue.shade100 : Colors.red.shade100,
-                  child: Icon(
-                    isDone ? Icons.check : Icons.close,
-                    size: 18,
-                    color: isDone ? Colors.blue.shade800 : Colors.red.shade800,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        patient.name,
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                      Text(
-                        '#${item.queueNumber} • ${patient.mobileNumber}',
-                        style: const TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                    ],
-                  ),
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    const Text('Patient Registration Form', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF0F766E))),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: isDone ? Colors.green.shade50 : Colors.orange.shade50,
-                        borderRadius: BorderRadius.circular(8),
+                        color: _isExistingPatient ? Colors.teal.shade50 : Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Text(
-                        isDone ? 'Completed' : 'Skipped',
-                        style: TextStyle(
-                          fontSize: 10, 
-                          fontWeight: FontWeight.bold,
-                          color: isDone ? Colors.green.shade800 : Colors.orange.shade800,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    // Action: re-add to queue
-                    TextButton.icon(
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        minimumSize: const Size(50, 20),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: () {
-                        final scaffoldMessenger = ScaffoldMessenger.of(context);
-                        widget.store.addToQueue(patient.mobileNumber).then((success) {
-                          if (!mounted) return;
-                          if (success) {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(content: Text('${patient.name} re-added to active queue!')),
-                            );
-                          } else {
-                            scaffoldMessenger.showSnackBar(
-                              SnackBar(content: Text('${patient.name} is already in active queue.')),
-                            );
-                          }
-                        });
-                      },
-                      icon: const Icon(Icons.replay, size: 12),
-                      label: const Text('Re-add', style: TextStyle(fontSize: 11)),
+                      child: Text(_isExistingPatient ? 'Existing Family Profile' : 'New Profile', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _isExistingPatient ? Colors.teal.shade800 : Colors.blue.shade800)),
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
+                
+                // Name Field (Type-ahead suggestions trigger)
+                TextFormField(
+                  controller: _nameController,
+                  decoration: InputDecoration(
+                    labelText: 'Full Name',
+                    prefixIcon: const Icon(Icons.person),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                  validator: (v) => v == null || v.isEmpty ? 'Name is required' : null,
+                ),
+                
+                // Show Type-Ahead Suggestions Panel
+                if (_nameSuggestions.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Container(
+                    constraints: const BoxConstraints(maxHeight: 180),
+                    decoration: BoxDecoration(color: Colors.teal.shade50.withOpacity(0.3), borderRadius: BorderRadius.circular(10), border: Border.all(color: Colors.teal.shade100)),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: _nameSuggestions.map((p) {
+                        return ListTile(
+                          dense: true,
+                          title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: Text('Mobile: ${p.mobileNumber} | Age: ${p.age} | ${p.gender}'),
+                          trailing: const Text('Autofill', style: TextStyle(color: Colors.teal, fontWeight: FontWeight.bold, fontSize: 12)),
+                          onTap: () => _autofillPatientDetails(p),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 12),
+
+                // Mobile Number
+                TextFormField(
+                  controller: _mobileController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Mobile Number',
+                    prefixIcon: const Icon(Icons.phone),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                  validator: (v) => v == null || v.isEmpty ? 'Mobile is required' : null,
+                ),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextFormField(
+                        controller: _ageController,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          labelText: 'Age',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _selectedGender,
+                        decoration: InputDecoration(
+                          labelText: 'Gender',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                          isDense: true,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'Male', child: Text('Male')),
+                          DropdownMenuItem(value: 'Female', child: Text('Female')),
+                          DropdownMenuItem(value: 'Other', child: Text('Other')),
+                        ],
+                        onChanged: (val) {
+                          if (val != null) setState(() => _selectedGender = val);
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // DOB Picker
+                InkWell(
+                  onTap: () => _selectDob(context),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(border: Border.all(color: Colors.grey), borderRadius: BorderRadius.circular(10)),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          _selectedDob == null
+                              ? 'Select Date of Birth'
+                              : 'DOB: ${DateFormat('yyyy-MM-dd').format(_selectedDob!)}',
+                          style: TextStyle(color: _selectedDob == null ? Colors.grey.shade600 : Colors.black),
+                        ),
+                        const Icon(Icons.cake, size: 16),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // Address
+                TextFormField(
+                  controller: _addressController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    labelText: 'Address',
+                    prefixIcon: const Icon(Icons.home),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  validator: (v) => v == null || v.isEmpty ? 'Address required' : null,
+                ),
+                const SizedBox(height: 12),
+
+                // Emergency Contact
+                TextFormField(
+                  controller: _emergencyContactController,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: 'Emergency Contact',
+                    prefixIcon: const Icon(Icons.contact_phone),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                    isDense: true,
+                  ),
+                  validator: (v) => v == null || v.isEmpty ? 'Emergency number required' : null,
+                ),
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _clearRegistrationFields,
+                        style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 14)),
+                        child: const Text('Clear'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: ElevatedButton(
+                        onPressed: () => _registerAndOrAddToQueue(andQueue: true),
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14)),
+                        child: const Text('Register & Queue', style: TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    )
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: TextButton(
+                    onPressed: () => _registerAndOrAddToQueue(andQueue: false),
+                    child: const Text('Just Register Patient (No Queue)'),
+                  ),
+                )
               ],
             ),
           ),
-        );
-      },
+        ),
+      ),
+    );
+
+    final helperColumn = Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade100)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text('Quick Instructions', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F766E))),
+            SizedBox(height: 12),
+            Text('1. Start typing a name in the "Full Name" input box.', style: TextStyle(fontSize: 12, height: 1.4)),
+            SizedBox(height: 6),
+            Text('2. If they are a registered patient or a family member, they will show up in the type-ahead suggestion window.', style: TextStyle(fontSize: 12, height: 1.4)),
+            SizedBox(height: 6),
+            Text('3. Tap "Autofill" to populate their fields immediately. This allows you to easily register family members under the same mobile number.', style: TextStyle(fontSize: 12, height: 1.4)),
+          ],
+        ),
+      ),
+    );
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20.0),
+      child: isDesktop
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 11, child: formColumn),
+                const SizedBox(width: 24),
+                Expanded(flex: 9, child: helperColumn),
+              ],
+            )
+          : Column(
+              children: [
+                formColumn,
+                const SizedBox(height: 16),
+                helperColumn,
+              ],
+            ),
+    );
+  }
+
+  // --- TAB 4: Medicine Master Inventory Management ---
+  Widget _buildMedicineInventoryTab(bool isDesktop) {
+    final list = widget.store.medicinesMaster;
+
+    final formPanel = Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade100)),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _editingMedName == null ? 'Add New Medicine Preset' : 'Edit Medicine Preset',
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F766E)),
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _medNameController,
+              decoration: InputDecoration(
+                labelText: 'Medicine Name',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _medCategoryController.text,
+              decoration: InputDecoration(
+                labelText: 'Category',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
+              items: const [
+                DropdownMenuItem(value: 'Pain & Fever', child: Text('Pain & Fever')),
+                DropdownMenuItem(value: 'Antibiotics', child: Text('Antibiotics')),
+                DropdownMenuItem(value: 'Acidity & Digestion', child: Text('Acidity & Digestion')),
+                DropdownMenuItem(value: 'Allergies & Cold', child: Text('Allergies & Cold')),
+                DropdownMenuItem(value: 'Chronic', child: Text('Chronic (BP/Diabetes)')),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => _medCategoryController.text = val);
+              },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _medDosageController,
+                    decoration: InputDecoration(
+                      labelText: 'Dosage',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: TextFormField(
+                    controller: _medDurationController,
+                    decoration: InputDecoration(
+                      labelText: 'Duration',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextFormField(
+              controller: _medInstructionsController,
+              decoration: InputDecoration(
+                labelText: 'Default Instructions',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                if (_editingMedName != null) ...[
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _clearMedicineForm,
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _saveMedicineItem,
+                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white),
+                    child: Text(_editingMedName == null ? 'Add Medicine' : 'Save Changes'),
+                  ),
+                )
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final inventoryList = Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade100)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Medicine Inventory Master (${list.length})', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+            const SizedBox(height: 12),
+            Container(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: list.length,
+                separatorBuilder: (c, i) => const Divider(),
+                itemBuilder: (context, idx) {
+                  final med = list[idx];
+                  return ListTile(
+                    title: Text(med.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    subtitle: Text('Cat: ${med.category} | Dosage: ${med.defaultDosage} | Instructions: ${med.defaultInstructions}'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.edit, color: Colors.blue, size: 18),
+                          onPressed: () => _editMedicine(med),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.red, size: 18),
+                          onPressed: () {
+                            widget.store.deleteMasterMedicine(med.name);
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Medicine deleted from master list.')));
+                          },
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20.0),
+      child: isDesktop
+          ? Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 8, child: formPanel),
+                const SizedBox(width: 24),
+                Expanded(flex: 12, child: inventoryList),
+              ],
+            )
+          : Column(
+              children: [
+                formPanel,
+                const SizedBox(height: 16),
+                inventoryList,
+              ],
+            ),
+    );
+  }
+
+  // --- Helpers ---
+  Widget _buildMetricSummaryCard(String title, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.grey.shade100),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 8, offset: const Offset(0, 2)),
+          ],
+        ),
+        child: Column(
+          children: [
+            Text(title, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+            const SizedBox(height: 8),
+            Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+          ],
+        ),
+      ),
     );
   }
 }
