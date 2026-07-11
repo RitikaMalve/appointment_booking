@@ -561,11 +561,11 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
   late TabController _tabController;
   
   // Login Form Controllers
-  final _recepUserCtrl = TextEditingController();
-  final _recepPassCtrl = TextEditingController();
-  final _docUserCtrl = TextEditingController();
-  final _docPassCtrl = TextEditingController();
-  final _patientPhoneCtrl = TextEditingController();
+  final _recepUserCtrl = TextEditingController(text: 'clerk');
+  final _recepPassCtrl = TextEditingController(text: 'receptionist123');
+  final _docUserCtrl = TextEditingController(text: 'doctor');
+  final _docPassCtrl = TextEditingController(text: 'doctor123');
+  final _patientPhoneCtrl = TextEditingController(text: '9876543210');
 
   final _recepFormKey = GlobalKey<FormState>();
   final _docFormKey = GlobalKey<FormState>();
