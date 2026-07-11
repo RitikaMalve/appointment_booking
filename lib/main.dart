@@ -46,6 +46,26 @@ class ClinicApp extends StatelessWidget {
           ),
         ),
         fontFamily: 'Outfit', // A modern clean typeface resembling the mockup font
+        inputDecorationTheme: InputDecorationTheme(
+          filled: true,
+          fillColor: const Color(0xFFF8FAFC),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Color(0xFF0D9488), width: 1.5),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(color: Colors.redAccent),
+          ),
+        ),
       ),
       home: const ClinicMainDashboard(),
     );
@@ -554,6 +574,9 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
   String? _recepError;
   String? _docError;
   String? _patientError;
+  
+  bool _obscureClerkPassword = true;
+  bool _obscureDoctorPassword = true;
 
   @override
   void initState() {
@@ -1075,11 +1098,10 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
         children: [
           TextFormField(
             controller: _recepUserCtrl,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Username',
               hintText: 'clerk',
-              prefixIcon: const Icon(Icons.person_outline),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              prefixIcon: Icon(Icons.person_outline),
               isDense: true,
             ),
             validator: (v) => v == null || v.isEmpty ? 'Username required' : null,
@@ -1087,13 +1109,16 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
           const SizedBox(height: 12),
           TextFormField(
             controller: _recepPassCtrl,
-            obscureText: true,
+            obscureText: _obscureClerkPassword,
             decoration: InputDecoration(
               labelText: 'Password',
               hintText: 'receptionist123',
               prefixIcon: const Icon(Icons.lock_outline),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               isDense: true,
+              suffixIcon: IconButton(
+                icon: Icon(_obscureClerkPassword ? Icons.visibility_off : Icons.visibility, size: 20),
+                onPressed: () => setState(() => _obscureClerkPassword = !_obscureClerkPassword),
+              ),
             ),
             validator: (v) => v == null || v.isEmpty ? 'Password required' : null,
           ),
@@ -1127,11 +1152,10 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
         children: [
           TextFormField(
             controller: _docUserCtrl,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Username',
               hintText: 'doctor',
-              prefixIcon: const Icon(Icons.person_outline),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              prefixIcon: Icon(Icons.person_outline),
               isDense: true,
             ),
             validator: (v) => v == null || v.isEmpty ? 'Username required' : null,
@@ -1139,13 +1163,16 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
           const SizedBox(height: 12),
           TextFormField(
             controller: _docPassCtrl,
-            obscureText: true,
+            obscureText: _obscureDoctorPassword,
             decoration: InputDecoration(
               labelText: 'Password',
               hintText: 'doctor123',
               prefixIcon: const Icon(Icons.lock_outline),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
               isDense: true,
+              suffixIcon: IconButton(
+                icon: Icon(_obscureDoctorPassword ? Icons.visibility_off : Icons.visibility, size: 20),
+                onPressed: () => setState(() => _obscureDoctorPassword = !_obscureDoctorPassword),
+              ),
             ),
             validator: (v) => v == null || v.isEmpty ? 'Password required' : null,
           ),
@@ -1181,11 +1208,10 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
           TextFormField(
             controller: _patientPhoneCtrl,
             keyboardType: TextInputType.phone,
-            decoration: InputDecoration(
+            decoration: const InputDecoration(
               labelText: 'Registered Mobile Number',
               hintText: 'e.g. 9876543210',
-              prefixIcon: const Icon(Icons.phone_outlined),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              prefixIcon: Icon(Icons.phone_outlined),
             ),
             validator: (v) {
               if (v == null || v.isEmpty) return 'Mobile number required';
