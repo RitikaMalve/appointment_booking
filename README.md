@@ -81,3 +81,25 @@ The database automatically self-seeds with mock records on first launch. You can
 - **Clerk Portal**: Username `clerk`, Password `receptionist123`
 - **Doctor Portal**: Username `doctor`, Password `doctor123`
 - **Patient Portal**: Mobile number `9988776655` (Priya Patel) or `9345678901` (Ananya Iyer)
+
+---
+
+## 🌐 Deploying to GitHub (Future Use)
+
+To stage, commit, and push your future development updates to GitHub, use the following commands in your terminal:
+
+1. **Stage all modified and new files**:
+   ```bash
+   git add .
+   ```
+
+2. **Create a git commit with a descriptive message**:
+   ```bash
+   git commit -m "Describe your changes here"
+   ```
+
+3. **Push your changes to the remote repository on GitHub**:
+   ```bash
+   git push origin main
+   ```
+
