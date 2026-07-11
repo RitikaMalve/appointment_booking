@@ -13,7 +13,7 @@ class ReceptionistView extends StatefulWidget {
   State<ReceptionistView> createState() => _ReceptionistViewState();
 }
 
-class _ReceptionistViewState extends State<ReceptionistView> {
+class _ReceptionistViewState extends State<ReceptionistView> with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   
   final _mobileController = TextEditingController();
@@ -26,14 +26,18 @@ class _ReceptionistViewState extends State<ReceptionistView> {
   String _selectedGender = 'Male';
   bool _isExistingPatient = false;
   
+  late TabController _tabController;
+
   @override
   void initState() {
     super.initState();
     _mobileController.addListener(_onMobileChanged);
+    _tabController = TabController(length: 2, vsync: this);
   }
 
   @override
   void dispose() {
+    _tabController.dispose();
     _mobileController.removeListener(_onMobileChanged);
     _mobileController.dispose();
     _nameController.dispose();
@@ -149,6 +153,10 @@ class _ReceptionistViewState extends State<ReceptionistView> {
             SnackBar(content: Text('$name added to the queue list!')),
           );
           _clearRegistrationFields();
+          final isDesktop = MediaQuery.of(context).size.width >= 850;
+          if (!isDesktop) {
+            _tabController.animateTo(1);
+          }
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('$name is already active in the queue.')),
@@ -508,21 +516,37 @@ class _ReceptionistViewState extends State<ReceptionistView> {
             ),
           );
         } else {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 600, // Fixed height for form in scrollable mobile layout
-                  child: registrationForm,
+          return Column(
+            children: [
+              Container(
+                color: Colors.white,
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: const [
+                    Tab(icon: Icon(Icons.person_add_alt_1_outlined), text: 'Registration'),
+                    Tab(icon: Icon(Icons.dashboard_customize_outlined), text: 'Queue & Stats'),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 500, // Fixed height for queue lists in scrollable mobile layout
-                  child: queueDashboard,
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: registrationForm,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: queueDashboard,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           );
         }
       },
@@ -857,14 +881,15 @@ class _ReceptionistViewState extends State<ReceptionistView> {
                         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                       ),
                       onPressed: () {
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
                         widget.store.addToQueue(patient.mobileNumber).then((success) {
                           if (!mounted) return;
                           if (success) {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            scaffoldMessenger.showSnackBar(
                               SnackBar(content: Text('${patient.name} re-added to active queue!')),
                             );
                           } else {
-                            ScaffoldMessenger.of(context).showSnackBar(
+                            scaffoldMessenger.showSnackBar(
                               SnackBar(content: Text('${patient.name} is already in active queue.')),
                             );
                           }

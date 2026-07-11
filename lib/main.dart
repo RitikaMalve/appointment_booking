@@ -147,20 +147,25 @@ class _ClinicMainDashboardState extends State<ClinicMainDashboard> {
     IconData roleIcon = Icons.help;
     Color roleColor = Colors.grey;
 
+    final width = MediaQuery.of(context).size.width;
+    final isMobile = width < 600;
+
     switch (_currentRole) {
       case 'receptionist':
-        roleTitle = 'Reception Desk';
+        roleTitle = isMobile ? 'Reception' : 'Reception Desk';
         roleIcon = Icons.assignment_ind;
         roleColor = Colors.blue;
         break;
       case 'doctor':
-        roleTitle = 'Dr. Amit Verma (Consultant)';
+        roleTitle = isMobile ? 'Dr. Amit' : 'Dr. Amit Verma (Consultant)';
         roleIcon = Icons.medical_services;
         roleColor = Colors.teal;
         break;
       case 'patient':
         final p = _store.getPatientByMobile(_currentPatientMobile);
-        roleTitle = p != null ? 'Portal: ${p.name}' : 'Patient Portal';
+        roleTitle = p != null
+            ? (isMobile ? p.name.split(' ').first : 'Portal: ${p.name}')
+            : 'Patient Portal';
         roleIcon = Icons.person;
         roleColor = Colors.indigo;
         break;
@@ -182,37 +187,60 @@ class _ClinicMainDashboardState extends State<ClinicMainDashboard> {
         ],
       ),
       actions: [
-        // Load demo data helper
-        TextButton.icon(
-          onPressed: () {
-            MockGenerator.seedData(_store).then((_) {
-              if (!mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Demo Clinic database loaded successfully!')),
-              );
-            });
-          },
-          icon: const Icon(Icons.rocket_launch, size: 14),
-          label: const Text('Re-Load Demo Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          style: TextButton.styleFrom(foregroundColor: const Color(0xFF0D9488)),
-        ),
-        
-        const VerticalDivider(width: 20, thickness: 1, indent: 12, endIndent: 12),
-
-        // Log out button
-        ElevatedButton.icon(
-          onPressed: _logout,
-          icon: const Icon(Icons.logout, size: 14),
-          label: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.red.shade50,
-            foregroundColor: Colors.red.shade800,
-            elevation: 0,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        if (isMobile) ...[
+          // Compact load demo data helper
+          IconButton(
+            onPressed: () {
+              MockGenerator.seedData(_store).then((_) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Demo Clinic database loaded successfully!')),
+                );
+              });
+            },
+            icon: const Icon(Icons.rocket_launch, size: 18),
+            color: const Color(0xFF0D9488),
+            tooltip: 'Re-Load Demo Data',
           ),
-        ),
-        const SizedBox(width: 16),
+          IconButton(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout, size: 18),
+            color: Colors.red.shade800,
+            tooltip: 'Logout',
+          ),
+        ] else ...[
+          // Load demo data helper
+          TextButton.icon(
+            onPressed: () {
+              MockGenerator.seedData(_store).then((_) {
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Demo Clinic database loaded successfully!')),
+                );
+              });
+            },
+            icon: const Icon(Icons.rocket_launch, size: 14),
+            label: const Text('Re-Load Demo Data', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF0D9488)),
+          ),
+          
+          const VerticalDivider(width: 20, thickness: 1, indent: 12, endIndent: 12),
+
+          // Log out button
+          ElevatedButton.icon(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout, size: 14),
+            label: const Text('Logout', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade50,
+              foregroundColor: Colors.red.shade800,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            ),
+          ),
+        ],
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -408,17 +436,28 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Title Brand
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(4),
                       decoration: const BoxDecoration(
                         color: Colors.white,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.healing, color: Color(0xFF0D9488), size: 36),
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/logo.jpg',
+                          width: 54,
+                          height: 54,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const Icon(
+                            Icons.healing,
+                            color: Color(0xFF0D9488),
+                            size: 36,
+                          ),
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 16),
                     const Column(
@@ -443,7 +482,7 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
                   elevation: 12,
                   child: Container(
                     constraints: const BoxConstraints(maxWidth: 500),
-                    padding: const EdgeInsets.all(32.0),
+                    padding: EdgeInsets.all(MediaQuery.of(context).size.width < 450 ? 16.0 : 32.0),
                     child: Column(
                       children: [
                         const Text(
@@ -485,10 +524,10 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
                           ),
                         ),
                         const SizedBox(height: 24),
-
-                        // Form Switcher Area
+ 
+                        // Form Switcher Area (increased height to prevent overflows)
                         SizedBox(
-                          height: 220,
+                          height: 255,
                           child: TabBarView(
                             controller: _tabController,
                             children: [

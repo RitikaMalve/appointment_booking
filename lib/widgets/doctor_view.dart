@@ -4,6 +4,7 @@ import '../models/patient.dart';
 import '../models/queue_item.dart';
 import '../models/medical_record.dart';
 import '../services/clinic_store.dart';
+import '../utils/medicine_presets.dart';
 
 class DoctorView extends StatefulWidget {
   final ClinicStore store;
@@ -14,7 +15,7 @@ class DoctorView extends StatefulWidget {
   State<DoctorView> createState() => _DoctorViewState();
 }
 
-class _DoctorViewState extends State<DoctorView> {
+class _DoctorViewState extends State<DoctorView> with SingleTickerProviderStateMixin {
   final _prescriptionFormKey = GlobalKey<FormState>();
   
   // Prescription Form Fields
@@ -31,8 +32,19 @@ class _DoctorViewState extends State<DoctorView> {
   bool _isFeesPaidDirect = false;
   String? _lastServingPatientId;
 
+  late TabController _tabController;
+  String _selectedMedCategory = 'All';
+  String _searchPresetQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
   @override
   void dispose() {
+    _tabController.dispose();
     _diagnosisController.dispose();
     _notesController.dispose();
     _medNameController.dispose();
@@ -40,6 +52,23 @@ class _DoctorViewState extends State<DoctorView> {
     _medDurationController.dispose();
     _medInstructionsController.dispose();
     super.dispose();
+  }
+
+  void _quickAddPreset(MedicinePreset preset) {
+    setState(() {
+      _tempMedicines.add(MedicineItem(
+        name: preset.name,
+        dosage: preset.defaultDosage,
+        duration: preset.defaultDuration,
+        instructions: preset.defaultInstructions,
+      ));
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('${preset.name} added to prescription!'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
   }
 
   void _addTempMedicine() {
@@ -185,6 +214,9 @@ class _DoctorViewState extends State<DoctorView> {
                                 setState(() {
                                   _isFeesPaidDirect = item.isFeesPaid;
                                 });
+                                if (!isDesktop) {
+                                  _tabController.animateTo(1);
+                                }
                               },
                             );
                           }).toList(),
@@ -285,6 +317,9 @@ class _DoctorViewState extends State<DoctorView> {
                               setState(() {
                                 _isFeesPaidDirect = waitingQueue.first.isFeesPaid;
                               });
+                              if (!isDesktop) {
+                                _tabController.animateTo(1);
+                              }
                             },
                             icon: const Icon(Icons.arrow_forward),
                             label: Text('Call Next Patient (#${waitingQueue.first.queueNumber})'),
@@ -404,6 +439,147 @@ class _DoctorViewState extends State<DoctorView> {
                                 child: Text('No medicines added yet', style: TextStyle(color: Colors.grey)),
                               ),
                             ),
+                          const SizedBox(height: 16),
+
+                          // Quick Medicine Suggestions Box
+                          Card(
+                            color: Colors.teal.shade50.withOpacity(0.2),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              side: BorderSide(color: Colors.teal.shade200),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.auto_awesome, color: Color(0xFF0D9488), size: 18),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Quick Medicine Suggester',
+                                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF0F766E)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // Category Selector Row
+                                  SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: ['All', 'Pain & Fever', 'Antibiotics', 'Acidity & Digestion', 'Allergies & Cold', 'Chronic']
+                                          .map((category) {
+                                        final isSel = _selectedMedCategory == category;
+                                        return Padding(
+                                          padding: const EdgeInsets.only(right: 6.0),
+                                          child: ChoiceChip(
+                                            label: Text(category, style: TextStyle(fontSize: 11, fontWeight: isSel ? FontWeight.bold : FontWeight.normal)),
+                                            selected: isSel,
+                                            onSelected: (selected) {
+                                              if (selected) {
+                                                setState(() {
+                                                  _selectedMedCategory = category;
+                                                });
+                                              }
+                                            },
+                                            selectedColor: Colors.teal.shade100,
+                                            labelStyle: TextStyle(color: isSel ? Colors.teal.shade800 : Colors.black87),
+                                            backgroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // Search Field for presets
+                                  TextFormField(
+                                    decoration: InputDecoration(
+                                      hintText: 'Search medicines...',
+                                      prefixIcon: const Icon(Icons.search, size: 16),
+                                      isDense: true,
+                                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                      fillColor: Colors.white,
+                                      filled: true,
+                                    ),
+                                    onChanged: (val) {
+                                      setState(() {
+                                        _searchPresetQuery = val.trim();
+                                      });
+                                    },
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // Matching suggestions list
+                                  Container(
+                                    constraints: const BoxConstraints(maxHeight: 180),
+                                    child: ListView(
+                                      shrinkWrap: true,
+                                      children: medicinePresets.where((preset) {
+                                        final matchesCat = _selectedMedCategory == 'All' || preset.category.contains(_selectedMedCategory.split(' ').first);
+                                        final matchesSearch = _searchPresetQuery.isEmpty || preset.name.toLowerCase().contains(_searchPresetQuery.toLowerCase());
+                                        return matchesCat && matchesSearch;
+                                      }).map((preset) {
+                                        return Container(
+                                          margin: const EdgeInsets.only(bottom: 6),
+                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(8),
+                                            border: Border.all(color: Colors.teal.shade100),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                child: InkWell(
+                                                  onTap: () {
+                                                    setState(() {
+                                                      _medNameController.text = preset.name;
+                                                      _medDosageController.text = preset.defaultDosage;
+                                                      _medDurationController.text = preset.defaultDuration;
+                                                      _medInstructionsController.text = preset.defaultInstructions;
+                                                    });
+                                                    ScaffoldMessenger.of(context).showSnackBar(
+                                                      SnackBar(
+                                                        content: Text('Form populated with ${preset.name}!'),
+                                                        duration: const Duration(seconds: 1),
+                                                      ),
+                                                    );
+                                                  },
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        preset.name,
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                      ),
+                                                      Text(
+                                                        'Dosage: ${preset.defaultDosage} | Dur: ${preset.defaultDuration} | ${preset.defaultInstructions}',
+                                                        style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ),
+                                              ),
+                                              IconButton(
+                                                icon: const Icon(Icons.add_circle, color: Colors.teal, size: 24),
+                                                tooltip: 'Quick Add to prescription',
+                                                padding: EdgeInsets.zero,
+                                                constraints: const BoxConstraints(),
+                                                onPressed: () => _quickAddPreset(preset),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                           const SizedBox(height: 16),
 
                           // Add Medicine Inputs Box
@@ -571,21 +747,37 @@ class _DoctorViewState extends State<DoctorView> {
             ),
           );
         } else {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              children: [
-                SizedBox(
-                  height: 550, // scroll wrapper height
-                  child: leftPanel,
+          return Column(
+            children: [
+              Container(
+                color: Colors.white,
+                child: TabBar(
+                  controller: _tabController,
+                  indicatorColor: Theme.of(context).colorScheme.primary,
+                  labelColor: Theme.of(context).colorScheme.primary,
+                  unselectedLabelColor: Colors.grey,
+                  tabs: const [
+                    Tab(icon: Icon(Icons.people_alt_outlined), text: 'Patient Queue'),
+                    Tab(icon: Icon(Icons.description_outlined), text: 'Prescription'),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 700, // form wrapper height
-                  child: rightPanel,
+              ),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: leftPanel,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: rightPanel,
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           );
         }
       },

@@ -72,15 +72,23 @@ class _PatientViewState extends State<PatientView> {
                   children: [
                     // Icon
                     Container(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
-                        Icons.healing,
-                        size: 48,
-                        color: Theme.of(context).colorScheme.primary,
+                      child: ClipOval(
+                        child: Image.asset(
+                          'assets/logo.jpg',
+                          width: 64,
+                          height: 64,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Icon(
+                            Icons.healing,
+                            size: 48,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -155,84 +163,122 @@ class _PatientViewState extends State<PatientView> {
 
     final records = widget.store.getPatientRecords(patient.mobileNumber);
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(20.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Header Patient Profile Card
-          Card(
-            elevation: 2,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                    child: Text(
-                      patient.name.substring(0, 1).toUpperCase(),
-                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktop = constraints.maxWidth > 900;
+
+        final profileAndQueueSection = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header Patient Profile Card
+            Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                      child: Text(
+                        patient.name.substring(0, 1).toUpperCase(),
+                        style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          patient.name,
-                          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          '${patient.gender} • ${patient.age} years • Phone: ${patient.mobileNumber}',
-                          style: const TextStyle(color: Colors.black54),
-                        ),
-                      ],
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            patient.name,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          Text(
+                            '${patient.gender} • ${patient.age} years • Phone: ${patient.mobileNumber}',
+                            style: const TextStyle(color: Colors.black54),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: _logout,
-                    icon: const Icon(Icons.exit_to_app, size: 16),
-                    label: const Text('Change'),
-                  ),
-                ],
+                    OutlinedButton.icon(
+                      onPressed: _logout,
+                      icon: const Icon(Icons.exit_to_app, size: 16),
+                      label: const Text('Change'),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
-          // Queue Status Section
-          Text('Your Queue Status', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          _buildQueueStatusCard(
-            context,
-            inQueue: inQueue,
-            queueNumber: queueNumber,
-            patientsAhead: patientsAhead,
-            isNear: isNear,
-            isServing: isServing,
-            onJoinQueue: _joinQueue,
-          ),
-          const SizedBox(height: 24),
+            // Queue Status Section
+            Text('Your Queue Status', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 10),
+            _buildQueueStatusCard(
+              context,
+              inQueue: inQueue,
+              queueNumber: queueNumber,
+              patientsAhead: patientsAhead,
+              isNear: isNear,
+              isServing: isServing,
+              onJoinQueue: _joinQueue,
+            ),
+          ],
+        );
 
-          // Prescription History Section
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Your Prescription History', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
-              if (records.isNotEmpty)
-                Text(
-                  '${records.length} Record(s)',
-                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+        final prescriptionHistorySection = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Your Prescription History', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                if (records.isNotEmpty)
+                  Text(
+                    '${records.length} Record(s)',
+                    style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blue),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            _buildPrescriptionsList(records),
+          ],
+        );
+
+        if (isDesktop) {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: profileAndQueueSection,
                 ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          _buildPrescriptionsList(records),
-        ],
-      ),
+                const SizedBox(width: 24),
+                Expanded(
+                  flex: 6,
+                  child: prescriptionHistorySection,
+                ),
+              ],
+            ),
+          );
+        } else {
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                profileAndQueueSection,
+                const SizedBox(height: 24),
+                prescriptionHistorySection,
+              ],
+            ),
+          );
+        }
+      },
     );
   }
 
@@ -551,8 +597,21 @@ class _PatientViewState extends State<PatientView> {
                     children: [
                       Row(
                         children: [
-                          Icon(Icons.healing, color: Theme.of(context).colorScheme.primary, size: 28),
-                          const SizedBox(width: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: Image.asset(
+                              'assets/logo.jpg',
+                              width: 28,
+                              height: 28,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => Icon(
+                                Icons.healing,
+                                color: Theme.of(context).colorScheme.primary,
+                                size: 28,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
                           const Text(
                             'CLINIC PRESCRIPTION',
                             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, letterSpacing: 1),
