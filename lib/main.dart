@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'models/patient.dart';
 import 'services/clinic_store.dart';
 import 'widgets/receptionist_view.dart';
 import 'widgets/doctor_view.dart';
@@ -470,6 +471,7 @@ class ClinicLoginScreen extends StatefulWidget {
 class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   
+  // Login Form Controllers
   final _recepUserCtrl = TextEditingController();
   final _recepPassCtrl = TextEditingController();
   final _docUserCtrl = TextEditingController();
@@ -563,162 +565,436 @@ class _ClinicLoginScreenState extends State<ClinicLoginScreen> with SingleTicker
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFF0F766E), // Deep Teal
-            Color(0xFF0D9488), // Slate Teal
-            Color(0xFF1E3A8A), // Indigo Navy
-          ],
-        ),
-      ),
-      child: Center(
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                      child: ClipOval(
-                        child: Image.asset(
-                          'assets/logo.jpg',
-                          width: 54,
-                          height: 54,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => const Icon(
-                            Icons.healing,
-                            color: Color(0xFF0D9488),
-                            size: 36,
-                          ),
-                        ),
+    final size = MediaQuery.of(context).size;
+    final isDesktop = size.width > 900;
+    
+    final loginFormPanel = Container(
+      width: double.infinity,
+      constraints: const BoxConstraints(maxWidth: 480),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Card(
+            elevation: 8,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            child: Padding(
+              padding: const EdgeInsets.all(28.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Secure Portal Sign-In',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
+                    child: TabBar(
+                      controller: _tabController,
+                      indicator: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))],
                       ),
-                    ),
-                    const SizedBox(width: 16),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text('CareFlow', style: TextStyle(fontSize: 30, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
-                        Text('Clinical Management Suite', style: TextStyle(fontSize: 13, color: Colors.white70, letterSpacing: 0.5)),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 32),
-
-                // Login card
-                Card(
-                  elevation: 12,
-                  child: Container(
-                    constraints: const BoxConstraints(maxWidth: 500),
-                    padding: const EdgeInsets.all(32.0),
-                    child: Column(
-                      children: [
-                        const Text('Secure Portal Sign-In', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                        const SizedBox(height: 24),
-                        
-                        Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: BoxDecoration(color: Colors.grey.shade100, borderRadius: BorderRadius.circular(12)),
-                          child: TabBar(
-                            controller: _tabController,
-                            indicator: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 4, offset: const Offset(0, 2))],
-                            ),
-                            labelColor: const Color(0xFF0D9488),
-                            unselectedLabelColor: Colors.grey,
-                            labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                            indicatorSize: TabBarIndicatorSize.tab,
-                            dividerColor: Colors.transparent,
-                            tabs: const [
-                              Tab(text: 'Clerk Desk'),
-                              Tab(text: 'Doctor Cabin'),
-                              Tab(text: 'Patient Portal'),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-  
-                        SizedBox(
-                          height: 260,
-                          child: TabBarView(
-                            controller: _tabController,
-                            children: [
-                              _buildReceptionistForm(),
-                              _buildDoctorForm(),
-                              _buildPatientForm(),
-                            ],
-                          ),
-                        ),
+                      labelColor: const Color(0xFF0D9488),
+                      unselectedLabelColor: Colors.grey,
+                      labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                      indicatorSize: TabBarIndicatorSize.tab,
+                      dividerColor: Colors.transparent,
+                      tabs: const [
+                        Tab(text: 'Clerk Desk'),
+                        Tab(text: 'Doctor Cabin'),
+                        Tab(text: 'Patient Portal'),
                       ],
                     ),
                   ),
-                ),
-                const SizedBox(height: 32),
+                  const SizedBox(height: 20),
+                  SizedBox(
+                    height: 250,
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildReceptionistForm(),
+                        _buildDoctorForm(),
+                        _buildPatientForm(),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          _buildDemoAccountsPanel(),
+        ],
+      ),
+    );
 
-                // Quick connect options
-                Container(
-                  constraints: const BoxConstraints(maxWidth: 600),
-                  child: Column(
-                    children: [
-                      const Text('⚡ DEMO QUICK CONNECT', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 12,
-                        alignment: WrapAlignment.center,
-                        children: [
-                          _buildQuickCard('Clerk Portal', 'Front Desk', Icons.assignment_ind, Colors.blue, () => _quickConnect('receptionist')),
-                          _buildQuickCard('Dr. Verma', 'Doctor Cabin', Icons.medical_services, Colors.teal, () => _quickConnect('doctor')),
-                          _buildQuickCard('Rohan (Family)', '9876543210', Icons.person, Colors.orange, () => _quickConnect('patient', mobile: '9876543210')),
-                          _buildQuickCard('Priya (Family)', '9988776655', Icons.person, Colors.indigo, () => _quickConnect('patient', mobile: '9988776655')),
-                        ],
-                      ),
+    if (isDesktop) {
+      return Scaffold(
+        body: Row(
+          children: [
+            // Left branding panel
+            Expanded(
+              flex: 9,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF0F766E),
+                      Color(0xFF0D9488),
+                      Color(0xFF1E3A8A),
                     ],
                   ),
                 ),
+                child: Stack(
+                  children: [
+                    Positioned(
+                      top: -100,
+                      left: -100,
+                      child: Container(
+                        width: 300,
+                        height: 300,
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.04), shape: BoxShape.circle),
+                      ),
+                    ),
+                    Positioned(
+                      bottom: -80,
+                      right: -80,
+                      child: Container(
+                        width: 250,
+                        height: 250,
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.04), shape: BoxShape.circle),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(48.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                                child: ClipOval(
+                                  child: Image.asset(
+                                    'assets/logo.jpg',
+                                    width: 64,
+                                    height: 64,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Icon(
+                                      Icons.healing,
+                                      color: Color(0xFF0D9488),
+                                      size: 48,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text('CareFlow', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
+                                  Text('Clinical Management Suite', style: TextStyle(fontSize: 14, color: Colors.white70, letterSpacing: 0.5)),
+                                ],
+                              )
+                            ],
+                          ),
+                          const SizedBox(height: 48),
+                          const Text('Seamless Clinic Workflows', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
+                          const SizedBox(height: 12),
+                          const Text('Orchestrating receptionist desks, doctor cabins, and patient portals into a unified, responsive ecosystem.', style: TextStyle(fontSize: 15, color: Colors.white70, height: 1.5)),
+                          const SizedBox(height: 36),
+                          _buildFeatureBullet(Icons.people_alt, 'Real-Time Queue Management', 'Track patient slots, consult status, and re-order token positions instantly.'),
+                          _buildFeatureBullet(Icons.edit_note, 'Prescriptions & Medical Tests', 'Complete consultations, select medicine catalogs, and recommend lab tests.'),
+                          _buildFeatureBullet(Icons.switch_account_outlined, 'Family Profiles Switchboard', 'Link multiple patient profiles to a single mobile number for fast updates.'),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            // Right form panel
+            Expanded(
+              flex: 11,
+              child: Container(
+                color: const Color(0xFFF8FAFC),
+                height: double.infinity,
+                child: Center(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 40.0, horizontal: 24.0),
+                    child: loginFormPanel,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Mobile view
+      return Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF0F766E),
+                Color(0xFF0D9488),
+                Color(0xFF1E3A8A),
               ],
             ),
           ),
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+                        child: ClipOval(
+                          child: Image.asset(
+                            'assets/logo.jpg',
+                            width: 44,
+                            height: 44,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => const Icon(
+                              Icons.healing,
+                              color: Color(0xFF0D9488),
+                              size: 28,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('CareFlow', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  loginFormPanel,
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _buildFeatureBullet(IconData icon, String title, String desc) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.12), borderRadius: BorderRadius.circular(12)),
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 14)),
+                const SizedBox(height: 4),
+                Text(desc, style: const TextStyle(color: Colors.white70, fontSize: 12, height: 1.4)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDemoAccountsPanel() {
+    final patients = widget.store.patients;
+    
+    return Card(
+      elevation: 4,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.lock_open, color: Color(0xFF0D9488), size: 18),
+                SizedBox(width: 8),
+                Text(
+                  'Demo Accounts & Seeded Data',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF1E293B)),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Select any account below to instantly connect with preloaded data.',
+              style: TextStyle(color: Colors.grey, fontSize: 11),
+            ),
+            const SizedBox(height: 12),
+            
+            const Text('CLINIC STAFF', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
+            const SizedBox(height: 6),
+            _buildDemoAccountRow(
+              'Front Desk Clerk',
+              'Username: clerk | Pass: receptionist123',
+              Icons.assignment_ind,
+              Colors.blue,
+              () => _quickConnect('receptionist'),
+            ),
+            _buildDemoAccountRow(
+              'Dr. Amit Verma (Consultant)',
+              'Username: doctor | Pass: doctor123',
+              Icons.medical_services,
+              Colors.teal,
+              () => _quickConnect('doctor'),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text('PATIENTS / FAMILY ACCOUNTS', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 0.5)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(color: Colors.teal.shade50, borderRadius: BorderRadius.circular(8)),
+                  child: Text('${patients.length} Profiles', style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+                )
+              ],
+            ),
+            const SizedBox(height: 8),
+            
+            Container(
+              constraints: const BoxConstraints(maxHeight: 180),
+              child: patients.isEmpty
+                  ? const Center(child: Text('No patient profiles in database.', style: TextStyle(color: Colors.grey, fontSize: 12)))
+                  : ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: patients.length,
+                      separatorBuilder: (c, i) => const Divider(height: 8),
+                      itemBuilder: (context, idx) {
+                        final p = patients[idx];
+                        return _buildDemoPatientRow(p);
+                      },
+                    ),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildQuickCard(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        width: 135,
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white.withOpacity(0.15)),
-        ),
-        child: Column(
-          children: [
-            CircleAvatar(
-              backgroundColor: Colors.white,
-              radius: 16,
-              child: Icon(icon, color: color, size: 16),
+  Widget _buildDemoAccountRow(String title, String subtitle, IconData icon, Color color, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: color.withOpacity(0.1),
+            radius: 14,
+            child: Icon(icon, color: color, size: 14),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF1E293B))),
+                Text(subtitle, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              ],
             ),
-            const SizedBox(height: 8),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12), textAlign: TextAlign.center),
-            Text(subtitle, style: const TextStyle(color: Colors.white60, fontSize: 10), textAlign: TextAlign.center),
-          ],
-        ),
+          ),
+          ElevatedButton(
+            onPressed: onTap,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: color,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Login', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDemoPatientRow(Patient p) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: Colors.indigo.withOpacity(0.1),
+            radius: 14,
+            child: Text(
+              p.name.substring(0, 1).toUpperCase(),
+              style: const TextStyle(fontSize: 10, color: Colors.indigo, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(p.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF1E293B))),
+                    const SizedBox(width: 6),
+                    Text('(${p.gender.substring(0, 1)}, ${p.age}y)', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                  ],
+                ),
+                Text('Mobile: ${p.mobileNumber}', style: const TextStyle(fontSize: 10, color: Colors.grey)),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => _quickConnect('patient', mobile: p.mobileNumber),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0D9488),
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            child: const Text('Login', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
