@@ -103,3 +103,30 @@ To stage, commit, and push your future development updates to GitHub, use the fo
    git push origin main
    ```
 
+---
+
+## 🚀 Deploying the Web App to GitHub Pages (Future Use)
+
+To compile and deploy the latest build of the CareFlow Web App to GitHub Pages, run the following commands:
+
+1. **Build the Flutter Web files with the correct repository base href**:
+   ```bash
+   flutter build web --base-href "/appointment_booking/"
+   ```
+
+2. **Push the compiled assets to the `gh-pages` branch**:
+   ```bash
+   cd build/web
+   git init
+   git checkout -b gh-pages
+   git remote add origin https://github.com/RitikaMalve/appointment_booking.git
+   git add .
+   git commit -m "Deploy to GitHub Pages"
+   git push -f origin gh-pages
+   cd ../..
+   ```
+
+> [!IMPORTANT]
+> **Enable GitHub Pages**: Inside your GitHub repository, navigate to **Settings > Pages**. Under **Build and deployment > Branch**, change the source branch from `main` to `gh-pages` and save. This tells GitHub to host your compiled web app rather than your source code's README!
+
+
